@@ -1,0 +1,19 @@
+{application, mqttmud, [
+    {description, "An OTP application"},
+    {vsn, "0.1.0"},
+    {registered, []},
+    {mod, {mqttmud_app, []}},
+    {applications, [
+        kernel,
+        stdlib,
+        cowboy,
+        emqtt,
+        epgsql,
+        hackney,
+        jsone
+    ]},
+    {env, []},
+    {modules, []},
+    {licenses, ["Apache-2.0"]},
+    {links, []}
+]}.

@@ -1,0 +1,77 @@
+authentication = [
+  {
+    backend = built_in_database
+    mechanism = password_based
+    password_hash_algorithm {name = sha256, salt_position = suffix}
+    user_id_type = username
+  }
+]
+authorization {
+  cache {
+    enable = true
+    excludes = []
+    max_size = 32
+    ttl = 1m
+  }
+  deny_action = ignore
+  no_match = allow
+  sources = [
+    {
+      enable = true
+      path = "data/authz/acl.conf"
+      type = file
+    }
+  ]
+}
+rewrite = [
+  {
+    action = all
+    dest_topic = "game/${username}"
+    re = "^game$"
+    source_topic = game
+  }
+]
+rule_engine {
+  ignore_sys_message = true
+  jq_function_default_timeout = 10s
+  rules {
+    rule_f0cx {
+      actions = [
+        {
+          args {
+            mqtt_properties {}
+            payload = "{\"username\": \"${username}\", \"client_id\": \"${clientid}\"}"
+            qos = 0
+            retain = false
+            topic = disconnected
+            user_properties = ""
+          }
+          function = republish
+        }
+      ]
+      description = ""
+      enable = true
+      metadata {created_at = 1709221085171}
+      sql = "SELECT\n  username, clientid\nFROM\n  \"$events/client_disconnected\""
+    }
+    rule_o2qz {
+      actions = [
+        {
+          args {
+            mqtt_properties {}
+            payload = "{\"username\": \"${username}\", \"client_id\": \"${clientid}\"}"
+            qos = 1
+            retain = false
+            topic = connected
+            user_properties = ""
+          }
+          function = republish
+        }
+      ]
+      description = ""
+      enable = true
+      metadata {created_at = 1709221052497}
+      sql = "SELECT\n  username, clientid\nFROM\n  \"$events/client_connected\""
+    }
+  }
+}

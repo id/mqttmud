@@ -1,0 +1,6 @@
+-sname mqttmud
+
+-setcookie mqttmud_cookie
+
++K true
++A30

@@ -1,0 +1,8 @@
+rewrite = [
+  {
+    action = all
+    dest_topic = "game/${username}"
+    re = "^game$"
+    source_topic = game
+  }
+]
