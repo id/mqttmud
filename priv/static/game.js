@@ -1,4 +1,4 @@
-const client = mqtt.connect('ws://localhost:8083/mqtt', {
+const client = mqtt.connect('ws://' + location.hostname + ':8083/mqtt', {
   username: localStorage.getItem('username'),
   password: localStorage.getItem('password'),
   resubscribe: false,

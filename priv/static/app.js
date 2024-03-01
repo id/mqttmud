@@ -25,7 +25,7 @@ function register() {
   localStorage.setItem('username', username);
   localStorage.setItem('password', password);
 
-  fetch('http://localhost:8080/api/v1/users', {
+  fetch('/api/v1/users', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
