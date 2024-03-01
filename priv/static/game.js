@@ -1,7 +1,12 @@
 const client = mqtt.connect('ws://' + location.hostname + ':8083/mqtt', {
   username: localStorage.getItem('username'),
   password: localStorage.getItem('password'),
+  clientId: localStorage.getItem('username'),
   resubscribe: false,
+  clean: false,
+  properties: {
+    sessionExpiryInterval: 86400
+  },
 });
 client.on('connect', function () {
   console.log('Connected to MQTT Broker');

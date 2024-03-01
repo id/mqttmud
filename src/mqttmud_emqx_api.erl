@@ -60,6 +60,7 @@ handle_call({create_user, Username, Password}, _From, State) ->
     case hackney:request(post, EmqxUsersAPI, Headers, Payload) of
         {ok, 201, _, _} ->
             mqttmud_db:create_player(Username),
+            mqttmud_server:send_welcome_message(Username),
             {reply, ok, State};
         {ok, 409, _RespHeaders, ClientRef} ->
             {ok, Body} = hackney:body(ClientRef),
