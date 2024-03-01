@@ -94,7 +94,7 @@ handle_call({upsert_session, Username, ClientId}, _From, #{conn := Conn} = State
     ),
     {reply, ok, State};
 handle_call({delete_session, Username}, _From, #{conn := Conn} = State) ->
-    {ok, 1} = epgsql:equery(
+    {ok, _} = epgsql:equery(
         Conn,
         "DELETE FROM sessions WHERE player_id = (SELECT id FROM players WHERE name = $1)",
         [Username]
