@@ -38,19 +38,19 @@ handle_request(Req0, State) ->
             case mqttmud_emqx_api:create_user(Username, Password) of
                 ok ->
                     Req = cowboy_req:reply(201, Headers, <<>>, Req1),
-                    {true, Req, State};
+                    {stop, Req, State};
                 {error, already_exists} ->
                     Message = #{<<"error">> => <<"User already exists.">>},
                     Req = cowboy_req:reply(409, Headers, jsone:encode(Message), Req1),
-                    {false, Req, State};
+                    {stop, Req, State};
                 {error, _} ->
                     Message = #{<<"error">> => <<"Failed to register user.">>},
                     Req = cowboy_req:reply(400, Headers, jsone:encode(Message), Req1),
-                    {false, Req, State}
+                    {stop, Req, State}
             end;
         {error, Code, Message} ->
             Req = cowboy_req:reply(Code, Headers, jsone:encode(Message), Req1),
-            {false, Req, State}
+            {stop, Req, State}
     end.
 
 parse_body([{Input, true}]) ->

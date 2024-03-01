@@ -10,10 +10,14 @@ start_link() ->
     TransportOpts = #{port => Port},
     Env = #{dispatch => dispatch()},
     ProtocolOpts = #{env => Env},
-    cowboy:start_clear(rest_api, maps:to_list(TransportOpts), ProtocolOpts).
+    cowboy:start_clear(?MODULE, maps:to_list(TransportOpts), ProtocolOpts).
 
 dispatch() ->
     cowboy_router:compile([{'_', routes()}]).
 
 routes() ->
-    [{"/users", mqttmud_http_users, []}].
+    [
+        {"/api/v1/users", mqttmud_http_users, []},
+        {"/", cowboy_static, {priv_file, mqttmud, "static/index.html"}},
+        {"/[...]", cowboy_static, {priv_dir, mqttmud, "static"}}
+    ].

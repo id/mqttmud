@@ -90,7 +90,7 @@ handle_call({subscribe, ClientId, Topic}, _From, State) ->
         {ok, 200, _, _} ->
             {reply, ok, State};
         Other ->
-            logger:warning("Failed to subscribe client ~p to ~p", [ClientId, Topic]),
+            logger:warning("Failed to subscribe client ~p to ~p: Other", [ClientId, Topic, Other]),
             {reply, {error, Other}, State}
     end;
 handle_call({unsubscribe, ClientId, Topic}, _From, State) ->
