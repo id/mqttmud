@@ -54,7 +54,7 @@ function login() {
   const username = document.getElementById('username').value;
   const password = document.getElementById('password').value;
   
-  const client = mqtt.connect('ws://' + location.hostname + ':8083/mqtt', {
+  const client = mqtt.connect('wss://' + location.hostname + ':8084/mqtt', {
     username: username,
     password: password,
     clientId: username,
