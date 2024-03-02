@@ -53,16 +53,23 @@
     width: fit-content;
 }
 
-.user-message {
-    /* background-color: #007bff; */
-    /* color: white; */
+.self {
     text-align: right;
     margin-left: auto;
 }
-.response-message {
-    /* background-color: #eee; */
+
+.self-message {
+    background-color: #007bff;
+    color: white;
+}
+
+.other {
     text-align: left;
     margin-right: auto;
+}
+
+.other-message {
+    background-color: #eee;
 }
 .sender {
     font-size: 0.8em;

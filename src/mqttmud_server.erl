@@ -169,7 +169,7 @@ do(<<"whisper ", Whatever/binary>>, Client, Username) ->
                 Client,
                 <<"users/", Username/binary>>,
                 ?DM,
-                <<"You can't whisper to someone in another room.">>
+                <<"You can only whisper with someone in the same room.">>
             )
     end;
 do(<<"shout ", Whatever/binary>>, Client, Username) ->

@@ -65,13 +65,13 @@ function handleVoice(parsedMessage) {
   const msg = parsedMessage.message;
   switch (voiceType) {
   case 'say':
-    displayMessage('DM', `You hear ${parsedMessage.from} say: "${msg.message}"`, 'text-success');
+    displayMessage(parsedMessage.from, msg.message, 'text-success');
     break;
   case 'whisper':
-    displayMessage('DM', `You hear a whisper from ${parsedMessage.from}: "${msg.message}"`, 'text-success,fw-light,fst-italic');
+    displayMessage(parsedMessage.from, msg.message, 'text-success,fw-light,fst-italic');
     break;
   case 'shout':
-    displayMessage('DM', `You hear a shout: <b>${msg.message}</b>`, 'font-weight-bold,text-uppercase');
+    displayMessage(parsedMessage.from, msg.message, 'font-weight-bold,text-uppercase');
     break;
   }
 }
@@ -80,7 +80,7 @@ function sendMessage() {
   const message = document.getElementById('messageInput').value;
   if (message) {
     client.publish('game', message);
-    displayMessage(localStorage.getItem('username'), message, 'text-primary');
+    displayMessage(localStorage.getItem('username'), message, 'text-white');
     document.getElementById('messageInput').value = '';
   }
 }
@@ -90,18 +90,24 @@ function displayMessage(from, message, styles) {
   const fromElement = document.createElement('div');
   fromElement.classList.add('sender');
   fromElement.textContent = from;
-  const messageElement = document.createElement('div');
-  messageElement.appendChild(fromElement);
-  messageElement.innerHTML += message;
-  messageElement.classList.add('chat-message');
+  const messageText = document.createElement('p');
+  messageText.innerHTML = message;
+  messageText.classList.add('chat-message');
   if (from === localStorage.getItem('username')) {
-    messageElement.classList.add('user-message');
+    fromElement.classList.add('self');
+    messageText.classList.add('self');
+    messageText.classList.add('self-message');
   } else {
-    messageElement.classList.add('response-message');
+    fromElement.classList.add('other');
+    messageText.classList.add('other');
+    messageText.classList.add('other-message');
   }
   styles.split(',').forEach(style =>
-    messageElement.classList.add(style)
+    messageText.classList.add(style)
   );
+  const messageElement = document.createElement('div');
+  messageElement.appendChild(fromElement);
+  messageElement.appendChild(messageText);
   chatHistory.appendChild(messageElement);
   chatHistory.scrollTop = chatHistory.scrollHeight;
 }
