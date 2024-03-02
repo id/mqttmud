@@ -23,19 +23,38 @@ client.on('message', function (topic, message) {
   case 'voice':
     displayMessage(parsedMessage.from, parsedMessage.message, '.text-primary');
     break;
-  case 'move':
-    document.getElementById('room').innerHTML = parsedMessage.message;
+  case 'command':
+    handleCommand(parsedMessage);
     break;
-  case 'look':
-    playersString = parsedMessage.players.length > 0 ? parsedMessage.players.join(', ') : 'no one else';
-    exitsString = parsedMessage.exits.join(', ');
-    displayMessage(parsedMessage.from, 'You are in a room with ' + playersString + '. Exits are: ' + exitsString + '.', '.text-info');
+  case 'data':
+    handleData(parsedMessage);
     break;
   }
 });
 client.on('subscribe', function (topic) {
   console.log('Subscribed to', topic);
 });
+
+function handleCommand(parsedMessage) {
+  const msg = parsedMessage.message;
+  switch (msg.command) {
+  case 'move':
+    displayMessage(parsedMessage.from, 'You entered ' + msg.message + '.', '.text-info');
+    document.getElementById('room').innerHTML = msg.message;
+    break;
+  }
+}
+
+function handleData(parsedMessage) {
+  const msg = parsedMessage.message;
+  switch (msg.dataType) {
+  case 'look':
+    playersString = msg.players.length > 0 ? msg.players.join(', ') : 'no one else';
+    exitsString = msg.exits.join(', ');
+    displayMessage(parsedMessage.from, 'You are in a room with ' + playersString + '. Exits are: ' + exitsString + '.', '.text-info');
+    break;
+  }
+}
 
 function sendMessage() {
   const message = document.getElementById('messageInput').value;
@@ -53,7 +72,7 @@ function displayMessage(from, message, style) {
   fromElement.textContent = from;
   const messageElement = document.createElement('div');
   messageElement.appendChild(fromElement);
-  messageElement.appendChild(document.createTextNode(message));
+  messageElement.innerHTML += message;
   messageElement.classList.add('chat-message');
   if (from === localStorage.getItem('username')) {
     messageElement.classList.add('user-message');

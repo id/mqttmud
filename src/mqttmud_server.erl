@@ -19,6 +19,16 @@
 -define(BROKER, "mqtt://localhost:1883").
 -define(CLIENT_ID, "mqttmud").
 
+-define(DM, <<"DM">>).
+
+-define(notification, notification).
+-define(message, message).
+-define(cmd, command).
+-define(cmd_move, move).
+-define(data, data).
+-define(look, look).
+-define(voice, voice).
+
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
@@ -68,9 +78,11 @@ handle_call(_Request, _From, State) ->
 
 handle_cast({send_welcome_message, Username}, #{client := Client} = State) ->
     Message = jsone:encode(#{
-        <<"type">> => <<"message">>,
-        <<"from">> => <<"DM">>,
-        <<"message">> => <<"Welcome to the game, ", Username/binary, "! Type 'help' for a list of commands. Have fun!">>
+        type => message,
+        from => ?DM,
+        message =>
+            <<"Welcome to the game, ", Username/binary,
+                "! Type 'help' for a list of commands. Have fun!">>
     }),
     emqtt:publish(Client, <<"users/", Username/binary>>, Message, [{qos, 1}, {retain, true}]),
     {noreply, State};
@@ -96,84 +108,89 @@ handle_messsage(Client, #{topic := <<"connected">>, payload := Payload}) ->
     ok = mqttmud_db:upsert_session(Username, ClientId),
     Room = mqttmud_db:player_room(Username),
     Message = jsone:encode(#{
-        <<"type">> => <<"notification">>,
-        <<"from">> => <<"DM">>,
-        <<"message">> => <<Username/binary, " entered the room.">>
+        type => notification,
+        from => ?DM,
+        message => <<Username/binary, " entered the room.">>
     }),
     emqtt:publish(Client, <<"rooms/", Room/binary>>, Message, 1),
     mqttmud_emqx_api:subscribe(ClientId, <<"users/", Username/binary>>),
+    mqttmud_emqx_api:subscribe(ClientId, <<"users/", Username/binary, "/inbox">>),
     mqttmud_emqx_api:subscribe(ClientId, <<"rooms/", Room/binary>>);
 handle_messsage(Client, #{topic := <<"disconnected">>, payload := Payload}) ->
     logger:info("Disconnected: ~p", [Payload]),
-    #{<<"username">> := Username, <<"client_id">> := _ClientId} = jsone:decode(Payload),
-    Room = mqttmud_db:player_room(Username),
+    #{<<"username">> := Username, <<"client_id">> := ClientId} = jsone:decode(Payload),
+    RoomId = mqttmud_db:player_room(Username),
+    mqttmud_emqx_api:unsubscribe(ClientId, <<"rooms/", RoomId/binary>>),
     ok = mqttmud_db:delete_session(Username),
-    Message = jsone:encode(#{
-        <<"type">> => <<"notification">>,
-        <<"from">> => <<"DM">>,
-        <<"message">> => <<Username/binary, " has left the game.">>
-    }),
-    emqtt:publish(Client, <<"rooms/", Room/binary>>, Message, 1);
+    send_notification(
+        Client, <<"rooms/", RoomId/binary>>, ?DM, <<Username/binary, " has left the game.">>
+    );
 handle_messsage(Client, #{topic := Topic, payload := Payload}) ->
     [<<"game">>, Username] = binary:split(Topic, <<"/">>, [global]),
     do(Payload, Client, Username).
 
 do(<<"help">>, Client, Username) ->
-    Message = jsone:encode(#{
-        <<"type">> => <<"message">>,
-        <<"from">> => <<"DM">>,
-        <<"message">> => <<"You can use 'look', 'go <exit>', and 'say <something>'.">>
-    }),
-    emqtt:publish(Client, <<"users/", Username/binary>>, Message, 1);
+    Message = <<
+"<u>Commands:</u><br/>
+<em>say</em> <message>  - Says something out loud, e.g. 'say Hello'<br/>
+<em>look</em>           - Examines the surroundings, e.g. 'look'<br/>
+<em>go <exit></em>      - Moves through the exit specified, e.g. 'go outside'
+">>,
+    send_message(Client, <<"users/", Username/binary>>, ?DM, Message);
 do(<<"look">>, Client, Username) ->
     RoomPlayers = mqttmud_db:room_players(Username),
     RoomExits = mqttmud_db:room_exits(Username),
-    Message = jsone:encode(#{
-        <<"type">> => <<"look">>,
-        <<"from">> => <<"DM">>,
-        <<"players">> => RoomPlayers,
-        <<"exits">> => RoomExits
-    }),
-    emqtt:publish(Client, <<"users/", Username/binary>>, Message, 1);
+    send_data(Client, <<"users/", Username/binary>>, ?DM, #{
+        dataType => ?look,
+        players => RoomPlayers,
+        exits => RoomExits
+    });
 do(<<"go ", Exit/binary>>, Client, Username) ->
     OldRoomId = mqttmud_db:player_room(Username),
     {NewRoomId, NewRoomName} = mqttmud_db:get_room_by_exit(Exit),
     ClientId = mqttmud_db:player_client_id(Username),
     mqttmud_db:move_player_to(Username, NewRoomId),
     mqttmud_emqx_api:unsubscribe(ClientId, <<"rooms/", OldRoomId/binary>>),
-    Message1 = jsone:encode(#{
-        <<"type">> => <<"notification">>,
-        <<"from">> => <<"DM">>,
-        <<"message">> => <<Username/binary, " has left the room.">>
-    }),
-    emqtt:publish(Client, <<"rooms/", OldRoomId/binary>>, Message1, 1),
-
-    Message2 = jsone:encode(#{
-        <<"type">> => <<"notification">>,
-        <<"from">> => <<"DM">>,
-        <<"message">> => <<Username/binary, " has entered the room.">>
-    }),
-    emqtt:publish(Client, <<"rooms/", NewRoomId/binary>>, Message2, 1),
-    Message3 = jsone:encode(#{
-        <<"type">> => <<"move">>,
-        <<"from">> => <<"DM">>,
-        <<"message">> => NewRoomName
-    }),
-    emqtt:publish(Client, <<"users/", Username/binary>>, Message3, 1),
+    send_notification(
+        Client, <<"rooms/", OldRoomId/binary>>, ?DM, <<Username/binary, " has left the room.">>
+    ),
+    send_notification(
+        Client, <<"rooms/", NewRoomId/binary>>, ?DM, <<Username/binary, " has entered the room.">>
+    ),
+    send_cmd(Client, <<"users/", Username/binary>>, ?cmd_move, NewRoomName),
     mqttmud_emqx_api:subscribe(ClientId, <<"rooms/", NewRoomId/binary>>);
 do(<<"say ", Whatever/binary>>, Client, Username) ->
     Room = mqttmud_db:player_room(Username),
-    Message = jsone:encode(#{
-        <<"type">> => <<"voice">>,
-        <<"from">> => Username,
-        <<"message">> => Whatever
-    }),
-    emqtt:publish(Client, <<"rooms/", Room/binary>>, Message, 1);
+    send_voice(Client, <<"rooms/", Room/binary>>, Username, Whatever);
+do(<<"whisper ", Whatever/binary>>, Client, Username) ->
+    [To, Message] = binary:split(Whatever, <<" ">>),
+    FromRoom = mqttmud_db:player_room(Username),
+    ToRoom = mqttmud_db:player_room(To),
+    case FromRoom =:= ToRoom of
+        true ->
+            send_voice(Client, <<"users/", To/binary, "/inbox">>, Username, Message);
+        false ->
+            send_message(Client, <<"users/", Username/binary>>, ?DM, <<"You can't whisper to someone in another room.">>)
+    end;
 do(Bin, Client, Username) ->
     logger:warning("Unknown command: ~p", [Bin]),
-    Message = jsone:encode(#{
-        <<"type">> => <<"message">>,
-        <<"from">> => <<"DM">>,
-        <<"message">> => <<"What was that?">>
-    }),
-    emqtt:publish(Client, <<"users/", Username/binary>>, Message, 1).
+    send_message(Client, <<"users/", Username/binary>>, ?DM, <<"Unknown command.">>).
+
+send_notification(Client, Topic, From, Message) ->
+    publish(Client, Topic, From, ?notification, Message).
+
+send_message(Client, Topic, From, Message) ->
+    publish(Client, Topic, From, ?message, Message).
+
+send_cmd(Client, Topic, CmdType, Message) ->
+    publish(Client, Topic, ?DM, ?cmd, #{command => CmdType, message => Message}).
+
+send_data(Client, Topic, From, Message) ->
+    publish(Client, Topic, From, ?data, Message).
+
+send_voice(Client, Topic, From, Message) ->
+    publish(Client, Topic, From, ?voice, Message).
+
+publish(Client, Topic, From, Type, Message) ->
+    Payload = jsone:encode(#{type => Type, from => From, message => Message}),
+    emqtt:publish(Client, Topic, Payload, 1).

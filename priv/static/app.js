@@ -33,8 +33,17 @@ function register() {
     body: JSON.stringify({ username: username, password: password }),
   })
     .then(data => {
+      if (data.ok) {
       console.log('Registration successful', data);
-      window.location.href = 'game.html';
+        localStorage.setItem('username', username);
+        localStorage.setItem('password', password);
+
+        window.location.href = 'game.html';
+      } else {
+        document.getElementById('alertText').innerHTML = 'Registration failed. Please try again.';
+        document.getElementById('alert').style.visibility = 'visible';
+        console.error('Registration failed:', data);
+      }
     })
     .catch((error) => {
       console.error('Error:', error);
@@ -45,8 +54,25 @@ function login() {
   const username = document.getElementById('username').value;
   const password = document.getElementById('password').value;
   
-  localStorage.setItem('username', username);
-  localStorage.setItem('password', password);
+  const client = mqtt.connect('ws://' + location.hostname + ':8083/mqtt', {
+    username: username,
+    password: password,
+    clientId: username,
+    resubscribe: false,
+    clean: false,
+  });
+  client.on('connect', function () {
+    console.log('Logged in successfully.', data);
+    client.end();
+    localStorage.setItem('username', username);
+    localStorage.setItem('password', password);
 
-  window.location.href = 'game.html';
+    window.location.href = 'game.html';
+  });
+  client.on('error', function (error) {
+    console.error('Login failed:', error);
+    client.end();
+    document.getElementById('alertText').innerHTML = 'Login failed. Please try again.';
+    document.getElementById('alert').style.visibility = 'visible';
+  });
 }
