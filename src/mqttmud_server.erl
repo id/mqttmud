@@ -117,9 +117,10 @@ handle_messsage(Client, #{topic := <<"disconnected">>, payload := Payload}) ->
     );
 handle_messsage(Client, #{topic := Topic, payload := Payload}) ->
     [<<"game">>, Username] = binary:split(Topic, <<"/">>, [global]),
-    do(Payload, Client, Username).
+    [Cmd | Rest] = binary:split(Payload, <<" ">>),
+    do(string:lowercase(Cmd), Rest, Client, Username).
 
-do(<<"help">>, Client, Username) ->
+do(<<"help">>, _, Client, Username) ->
     Message = <<
         "Commands:"
         "<ul>"
@@ -132,7 +133,7 @@ do(<<"help">>, Client, Username) ->
     "</ul>"
     >>,
     send_message(Client, <<"users/", Username/binary>>, ?DM, Message);
-do(<<"look">>, Client, Username) ->
+do(<<"look">>, _, Client, Username) ->
     RoomPlayers = mqttmud_db:room_players(Username),
     RoomExits = mqttmud_db:room_exits(Username),
     send_data(Client, <<"users/", Username/binary>>, ?DM, #{
@@ -140,7 +141,7 @@ do(<<"look">>, Client, Username) ->
         players => RoomPlayers,
         exits => RoomExits
     });
-do(<<"go ", Exit/binary>>, Client, Username) ->
+do(<<"go">>, Exit, Client, Username) ->
     OldRoomId = mqttmud_db:player_room(Username),
     {NewRoomId, NewRoomName} = mqttmud_db:get_room_by_exit(Exit),
     ClientId = mqttmud_db:player_client_id(Username),
@@ -154,10 +155,10 @@ do(<<"go ", Exit/binary>>, Client, Username) ->
     ),
     send_cmd(Client, <<"users/", Username/binary>>, ?cmd_move, NewRoomName),
     mqttmud_emqx_api:subscribe(ClientId, <<"rooms/", NewRoomId/binary>>);
-do(<<"say ", Whatever/binary>>, Client, Username) ->
+do(<<"say">>, Whatever, Client, Username) ->
     Room = mqttmud_db:player_room(Username),
     send_say(Client, <<"rooms/", Room/binary>>, Username, Whatever);
-do(<<"whisper ", Whatever/binary>>, Client, Username) ->
+do(<<"whisper">>, Whatever, Client, Username) ->
     [To, Message] = binary:split(Whatever, <<" ">>),
     FromRoom = mqttmud_db:player_room(Username),
     ToRoom = mqttmud_db:player_room(To),
@@ -172,7 +173,7 @@ do(<<"whisper ", Whatever/binary>>, Client, Username) ->
                 <<"You can only whisper with someone in the same room.">>
             )
     end;
-do(<<"shout ", Whatever/binary>>, Client, Username) ->
+do(<<"shout">>, Whatever, Client, Username) ->
     Players = mqttmud_db:active_players(),
     lists:foreach(
         fun(Player) ->
@@ -180,8 +181,8 @@ do(<<"shout ", Whatever/binary>>, Client, Username) ->
         end,
         Players
     );
-do(Bin, Client, Username) ->
-    logger:warning("Unknown command: ~p", [Bin]),
+do(Cmd, _, Client, Username) ->
+    logger:warning("Unknown command: ~p", [Cmd]),
     send_message(Client, <<"users/", Username/binary>>, ?DM, <<"Unknown command.">>).
 
 init_session(_Client, ?DM, _ClientId) ->
