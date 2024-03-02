@@ -93,8 +93,12 @@ handle_cast({subscribe, ClientId, Topic}, State) ->
     case hackney:request(post, SubscribeAPI, Headers, Payload) of
         {ok, 200, _, _} ->
             {noreply, State};
+        {ok, 401, _, ClientRef} ->
+            {ok, Body} = hackney:body(ClientRef),
+            logger:warning("Failed to subscribe client ~p to ~p: ~p", [ClientId, Topic, Body]),
+            {noreply, State};
         Other ->
-            logger:warning("Failed to subscribe client ~p to ~p: ~p", [ClientId, Topic, Other]),
+            logger:error("Failed to subscribe client ~p to ~p: ~p", [ClientId, Topic, Other]),
             {noreply, State}
     end;
 handle_cast({unsubscribe, ClientId, Topic}, State) ->
