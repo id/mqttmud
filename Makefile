@@ -8,6 +8,9 @@ all: compile
 compile:
 	$(REBAR) compile
 
+rel:
+	$(REBAR) release
+
 shell:
 	$(REBAR) shell
 
