@@ -24,10 +24,10 @@ create_user(Username, Password) ->
     gen_server:call(?MODULE, {create_user, Username, Password}).
 
 subscribe(ClientId, Topic) ->
-    gen_server:call(?MODULE, {subscribe, ClientId, Topic}).
+    gen_server:cast(?MODULE, {subscribe, ClientId, Topic}).
 
 unsubscribe(ClientId, Topic) ->
-    gen_server:call(?MODULE, {unsubscribe, ClientId, Topic}).
+    gen_server:cast(?MODULE, {unsubscribe, ClientId, Topic}).
 
 %% gen_server callbacks
 init([]) ->
@@ -80,7 +80,10 @@ handle_call({create_user, Username, Password}, _From, State) ->
             logger:warning("Failed to register user ~p: ~p", [Username, Other]),
             {reply, {error, Other}, State}
     end;
-handle_call({subscribe, ClientId, Topic}, _From, State) ->
+handle_call(_Request, _From, State) ->
+    {reply, not_implemented, State}.
+
+handle_cast({subscribe, ClientId, Topic}, State) ->
     ApiURL = maps:get(api_url, State),
     SubscribeAPI = iolist_to_binary([
         ApiURL, "/api/v5/clients/", ClientId, "/subscribe"
@@ -89,12 +92,12 @@ handle_call({subscribe, ClientId, Topic}, _From, State) ->
     Payload = jsone:encode(#{topic => Topic, qos => 1}),
     case hackney:request(post, SubscribeAPI, Headers, Payload) of
         {ok, 200, _, _} ->
-            {reply, ok, State};
+            {noreply, State};
         Other ->
             logger:warning("Failed to subscribe client ~p to ~p: Other", [ClientId, Topic, Other]),
-            {reply, {error, Other}, State}
+            {noreply, State}
     end;
-handle_call({unsubscribe, ClientId, Topic}, _From, State) ->
+handle_cast({unsubscribe, ClientId, Topic}, State) ->
     ApiURL = maps:get(api_url, State),
     UnsubscribeAPI = iolist_to_binary([
         ApiURL, "/api/v5/clients/", ClientId, "/unsubscribe"
@@ -103,18 +106,15 @@ handle_call({unsubscribe, ClientId, Topic}, _From, State) ->
     Payload = jsone:encode(#{topic => Topic}),
     case hackney:request(post, UnsubscribeAPI, Headers, Payload) of
         {ok, 204, _, _} ->
-            {reply, ok, State};
+            {noreply, State};
         {ok, _StatusCode, _RespHeaders, ClientRef} ->
             Body = jsone:decode(hackney:body(ClientRef)),
             logger:warning("Failed to unsubscribe client ~p from ~p: ~p", [ClientId, Topic, Body]),
-            {reply, {error, Body}, State};
+            {noreply, State};
         Other ->
             logger:warning("Failed to unsubscribe client ~p from ~p: ~p", [ClientId, Topic, Other]),
-            {reply, {error, Other}, State}
+            {noreply, State}
     end;
-handle_call(_Request, _From, State) ->
-    {reply, not_implemented, State}.
-
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
