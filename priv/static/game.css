@@ -52,14 +52,15 @@
     display: block;
     width: fit-content;
 }
+
 .user-message {
-    background-color: #007bff;
-    color: white;
+    /* background-color: #007bff; */
+    /* color: white; */
     text-align: right;
     margin-left: auto;
 }
 .response-message {
-    background-color: #eee;
+    /* background-color: #eee; */
     text-align: left;
     margin-right: auto;
 }

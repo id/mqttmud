@@ -121,10 +121,15 @@ handle_messsage(Client, #{topic := Topic, payload := Payload}) ->
 
 do(<<"help">>, Client, Username) ->
     Message = <<
-        "<u>Commands:</u><br/>\n"
-        "<em>say</em> <message>  - Says something out loud, e.g. 'say Hello'<br/>\n"
-        "<em>look</em>           - Examines the surroundings, e.g. 'look'<br/>\n"
-        "<em>go <exit></em>      - Moves through the exit specified, e.g. 'go outside'\n"
+        "Commands:"
+        "<ul>"
+        "<li>look           - examine the surroundings, e.g. 'look'</li>"
+        "<li>go <em>exit</em>      - move through the exit specified, e.g. 'go outside'</li>"
+        "<li>say <em>message</em>  - say something out loud to everyone in the room, e.g. 'say Hello'</li>"
+        "<li>whisper <em>username</em> <em>message</em> - whisper something to someone privately, e.g. 'whisper MyFriend a secret'. You both need to be in the same room.</li>"
+        "<li>shout <em>message</em>  - shout something to everyone, e.g. 'shout do you hear me?'</li>"
+        "<li>help           - show this help message</li>"
+    "</ul>"
     >>,
     send_message(Client, <<"users/", Username/binary>>, ?DM, Message);
 do(<<"look">>, Client, Username) ->
@@ -151,14 +156,14 @@ do(<<"go ", Exit/binary>>, Client, Username) ->
     mqttmud_emqx_api:subscribe(ClientId, <<"rooms/", NewRoomId/binary>>);
 do(<<"say ", Whatever/binary>>, Client, Username) ->
     Room = mqttmud_db:player_room(Username),
-    send_voice(Client, <<"rooms/", Room/binary>>, Username, Whatever);
+    send_say(Client, <<"rooms/", Room/binary>>, Username, Whatever);
 do(<<"whisper ", Whatever/binary>>, Client, Username) ->
     [To, Message] = binary:split(Whatever, <<" ">>),
     FromRoom = mqttmud_db:player_room(Username),
     ToRoom = mqttmud_db:player_room(To),
     case FromRoom =:= ToRoom of
         true ->
-            send_voice(Client, <<"users/", To/binary, "/inbox">>, Username, Message);
+            send_whisper(Client, <<"users/", To/binary, "/inbox">>, Username, Message);
         false ->
             send_message(
                 Client,
@@ -167,6 +172,14 @@ do(<<"whisper ", Whatever/binary>>, Client, Username) ->
                 <<"You can't whisper to someone in another room.">>
             )
     end;
+do(<<"shout ", Whatever/binary>>, Client, Username) ->
+    Players = mqttmud_db:active_players(),
+    lists:foreach(
+        fun(Player) ->
+            send_shout(Client, <<"users/", Player/binary>>, Username, Whatever)
+        end,
+        Players
+    );
 do(Bin, Client, Username) ->
     logger:warning("Unknown command: ~p", [Bin]),
     send_message(Client, <<"users/", Username/binary>>, ?DM, <<"Unknown command.">>).
@@ -198,8 +211,14 @@ send_cmd(Client, Topic, CmdType, Message) ->
 send_data(Client, Topic, From, Message) ->
     publish(Client, Topic, From, ?data, Message).
 
-send_voice(Client, Topic, From, Message) ->
-    publish(Client, Topic, From, ?voice, Message).
+send_say(Client, Topic, From, Message) ->
+    publish(Client, Topic, From, ?voice, #{voiceType => say, message => Message}).
+
+send_whisper(Client, Topic, From, Message) ->
+    publish(Client, Topic, From, ?voice, #{voiceType => whisper, message => Message}).
+
+send_shout(Client, Topic, From, Message) ->
+    publish(Client, Topic, From, ?voice, #{voiceType => shout, message => Message}).
 
 publish(Client, Topic, From, Type, Message) ->
     Payload = jsone:encode(#{type => Type, from => From, message => Message}),

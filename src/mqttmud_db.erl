@@ -21,6 +21,7 @@
     room_players/1,
     room_exits/1,
     move_player_to/2,
+    active_players/0,
     start_link/0,
     stop/0
 ]).
@@ -57,6 +58,9 @@ room_exits(Player) ->
 
 move_player_to(Player, RoomId) ->
     gen_server:call(?MODULE, {move_player_to, Player, RoomId}).
+
+active_players() ->
+    gen_server:call(?MODULE, active_players).
 
 %% gen_server callbacks
 init([]) ->
@@ -149,6 +153,13 @@ handle_call({move_player_to, Player, RoomId}, _From, #{conn := Conn} = State) ->
         [RoomId, Player]
     ),
     {reply, ok, State};
+handle_call(active_players, _From, #{conn := Conn} = State) ->
+    {ok, _, Result} = epgsql:equery(
+        Conn,
+        "SELECT p.name FROM players p JOIN sessions s ON p.id = s.player_id;",
+        []
+    ),
+    {reply, [P || {P} <- Result], State};
 handle_call(_Request, _From, State) ->
     {reply, not_implemented, State}.
 
