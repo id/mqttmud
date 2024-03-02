@@ -62,7 +62,7 @@ function login() {
     clean: false,
   });
   client.on('connect', function () {
-    console.log('Logged in successfully.', data);
+    console.log('Logged in successfully.');
     client.end();
     localStorage.setItem('username', username);
     localStorage.setItem('password', password);
