@@ -1,4 +1,4 @@
-const client = mqtt.connect('wss://' + location.hostname + ':8084/mqtt', {
+const client = mqtt.connect('ws://' + location.hostname + ':8083/mqtt', {
   username: localStorage.getItem('username'),
   password: localStorage.getItem('password'),
   clientId: localStorage.getItem('username'),
@@ -65,13 +65,13 @@ function handleVoice(parsedMessage) {
   const msg = parsedMessage.message;
   switch (voiceType) {
   case 'say':
-    displayMessage(parsedMessage.from, msg.message, 'text-success');
+    displayMessage(parsedMessage.from, msg.message, '', 'bi-volume-up');
     break;
   case 'whisper':
-    displayMessage(parsedMessage.from, msg.message, 'text-success,fw-light,fst-italic');
+    displayMessage(parsedMessage.from, msg.message, 'fst-italic', 'bi-lock');
     break;
   case 'shout':
-    displayMessage(parsedMessage.from, msg.message, 'font-weight-bold,text-uppercase');
+    displayMessage(parsedMessage.from, msg.message, 'font-weight-bold,text-uppercase', 'bi-megaphone');
     break;
   }
 }
@@ -80,31 +80,46 @@ function sendMessage() {
   const message = document.getElementById('messageInput').value;
   if (message) {
     client.publish('game', message);
-    displayMessage(localStorage.getItem('username'), message, 'text-white');
+    displayMessage(localStorage.getItem('username'), message);
     document.getElementById('messageInput').value = '';
   }
 }
 
-function displayMessage(from, message, styles) {
+function displayMessage(from, message, styles = '', icon = '') {
   const chatHistory = document.getElementById('chat-history');
   const fromElement = document.createElement('div');
   fromElement.classList.add('sender');
   fromElement.textContent = from;
   const messageText = document.createElement('p');
-  messageText.innerHTML = message;
+  if (icon) {
+    const iconElement = document.createElement('i');
+    iconElement.classList.add('bi');
+    iconElement.classList.add(icon);
+    iconElement.innerHTML = '&nbsp;&nbsp;';
+    messageText.appendChild(iconElement);
+  }
+  messageText.innerHTML += message;
   messageText.classList.add('chat-message');
   if (from === localStorage.getItem('username')) {
     fromElement.classList.add('self');
     messageText.classList.add('self');
-    messageText.classList.add('self-message');
+    messageText.classList.add('bg-primary');
+    messageText.classList.add('text-white');
+  } else if (from !== 'DM') {
+    fromElement.classList.add('other');
+    messageText.classList.add('other');
+    messageText.classList.add('bg-success');
+    messageText.classList.add('text-white');
   } else {
     fromElement.classList.add('other');
     messageText.classList.add('other');
-    messageText.classList.add('other-message');
+    messageText.classList.add('bg-light');
   }
-  styles.split(',').forEach(style =>
-    messageText.classList.add(style)
-  );
+  if (styles) {
+    styles.split(',').forEach(style =>
+      messageText.classList.add(style)
+    );
+  }
   const messageElement = document.createElement('div');
   messageElement.appendChild(fromElement);
   messageElement.appendChild(messageText);

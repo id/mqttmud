@@ -112,12 +112,14 @@ handle_call({player_client_id, Username}, _From, #{conn := Conn} = State) ->
     ),
     {reply, ClientId, State};
 handle_call({player_room, Player}, _From, #{conn := Conn} = State) ->
-    {ok, _, [{RoomId}]} = epgsql:equery(
+    case epgsql:equery(
         Conn,
         "SELECT r.id FROM rooms r JOIN room_players rp ON r.id = rp.room_id JOIN players p ON rp.player_id = p.id WHERE p.name = $1;",
         [Player]
-    ),
-    {reply, RoomId, State};
+    ) of
+        {ok, _, [{RoomId}]} -> {reply, RoomId, State};
+        {ok, _, []} -> {reply, undefined, State}
+    end;
 handle_call({get_room_by_exit, Exit}, _From, #{conn := Conn} = State) ->
     {ok, _, [Result]} = epgsql:equery(
         Conn,

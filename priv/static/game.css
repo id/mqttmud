@@ -1,28 +1,18 @@
-/* Custom page header */
 .header {
   padding-bottom: 20px;
-  border-bottom: 1px solid #e5e5e5;
 }
+
 .header h3 {
   margin-top: 0;
   margin-bottom: 0;
-  line-height: 40px; /* Make the masthead heading the same height as the navigation */
-}
-
-/* Custom page footer */
-.footer {
-  padding-top: 19px;
-  color: #777;
-  border-top: 1px solid #e5e5e5;
+  line-height: 40px;
 }
 
 .container-narrow > hr {
   margin: 30px 0;
 }
 
-/* Responsive: Portrait tablets and up */
 @media screen and (min-width: 768px) {
-  /* Remove the padding we set earlier */
   .header,
   .footer {
     padding-right: 0;
@@ -39,10 +29,8 @@
 .chat-history {
     height: 400px;
     overflow-y: auto;
-    border: 1px solid #ced4da;
     padding: 10px;
     margin-bottom: 20px;
-    background-color: #f8f9fa;
 }
 
 .chat-message {
@@ -58,19 +46,11 @@
     margin-left: auto;
 }
 
-.self-message {
-    background-color: #007bff;
-    color: white;
-}
-
 .other {
     text-align: left;
     margin-right: auto;
 }
 
-.other-message {
-    background-color: #eee;
-}
 .sender {
     font-size: 0.8em;
     font-weight: bold;
