@@ -94,7 +94,7 @@ handle_cast({subscribe, ClientId, Topic}, State) ->
         {ok, 200, _, _} ->
             {noreply, State};
         Other ->
-            logger:warning("Failed to subscribe client ~p to ~p: Other", [ClientId, Topic, Other]),
+            logger:warning("Failed to subscribe client ~p to ~p: ~p", [ClientId, Topic, Other]),
             {noreply, State}
     end;
 handle_cast({unsubscribe, ClientId, Topic}, State) ->
