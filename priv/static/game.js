@@ -50,7 +50,7 @@ function handleData(parsedMessage) {
   switch (msg.dataType) {
   case 'look':
     playersString = msg.players.length > 0 ? msg.players.join(', ') : 'no one else';
-    exitsString = msg.exits.join(', ');
+    exitsString = msg.exits.length > 0 ? msg.exits.join(', ') : 'none';
     displayMessage(parsedMessage.from, 'You are in a room with ' + playersString + '. Exits are: ' + exitsString + '.', 'text-success');
     break;
   }
@@ -129,7 +129,5 @@ function displayMessage(from, message, styles = '', icon = '') {
 
 function leave() {
   client.end();
-  localStorage.removeItem('username');
-  localStorage.removeItem('password');
   window.location.href = 'index.html';
 }

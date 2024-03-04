@@ -103,12 +103,12 @@ code_change(_OldVsn, State, _Extra) ->
 
 %% internal functions
 handle_messsage(Client, #{topic := <<"connected">>, payload := Payload}) ->
-    logger:info("Connected: ~p", [Payload]),
     #{<<"username">> := Username, <<"client_id">> := ClientId} = jsone:decode(Payload),
+    logger:info("~s connected", [Username]),
     init_session(Client, Username, ClientId);
 handle_messsage(Client, #{topic := <<"disconnected">>, payload := Payload}) ->
-    logger:info("Disconnected: ~p", [Payload]),
     #{<<"username">> := Username, <<"client_id">> := ClientId} = jsone:decode(Payload),
+    logger:info("~s disconnected", [Username]),
     RoomId = mqttmud_db:player_room(Username),
     mqttmud_emqx_api:unsubscribe(ClientId, <<"rooms/", RoomId/binary>>),
     ok = mqttmud_db:delete_session(Username),
@@ -143,7 +143,7 @@ do(<<"look">>, _, Client, Username) ->
     });
 do(<<"go">>, Exit, Client, Username) ->
     OldRoomId = mqttmud_db:player_room(Username),
-    {NewRoomId, NewRoomName} = mqttmud_db:get_room_by_exit(Exit),
+    {NewRoomId, NewRoomName} = mqttmud_db:get_room_by_exit(Exit, OldRoomId),
     ClientId = mqttmud_db:player_client_id(Username),
     mqttmud_db:move_player_to(Username, NewRoomId),
     mqttmud_emqx_api:unsubscribe(ClientId, <<"rooms/", OldRoomId/binary>>),
@@ -182,7 +182,7 @@ do(<<"shout">>, Whatever, Client, Username) ->
         Players
     );
 do(Cmd, _, Client, Username) ->
-    logger:warning("Unknown command: ~p", [Cmd]),
+    logger:warning("Unknown command: ~s", [Cmd]),
     send_message(Client, <<"users/", Username/binary>>, ?DM, <<"Unknown command.">>).
 
 init_session(_Client, ?DM, _ClientId) ->

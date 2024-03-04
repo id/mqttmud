@@ -1,3 +1,8 @@
+if (localStorage.getItem('username') && localStorage.getItem('password')) {
+  document.getElementById('username').value = localStorage.getItem('username');
+  document.getElementById('password').value = localStorage.getItem('password');
+}
+
 const togglePassword = document.querySelector("#togglePassword");
 togglePassword.addEventListener("click", function () {
   const password = document.querySelector("#password");

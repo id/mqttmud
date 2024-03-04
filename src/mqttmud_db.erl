@@ -12,12 +12,13 @@
 ]).
 
 -export([
+    apply_migrations/0,
     create_player/1,
     upsert_session/2,
     delete_session/1,
     player_client_id/1,
     player_room/1,
-    get_room_by_exit/1,
+    get_room_by_exit/2,
     room_players/1,
     room_exits/1,
     move_player_to/2,
@@ -31,6 +32,9 @@ start_link() ->
 
 stop() ->
     gen_server:call(?MODULE, stop).
+
+apply_migrations() ->
+    gen_server:call(?MODULE, apply_migrations).
 
 create_player(Name) ->
     gen_server:call(?MODULE, {create_player, Name}).
@@ -47,8 +51,8 @@ delete_session(Username) ->
 player_room(Player) ->
     gen_server:call(?MODULE, {player_room, Player}).
 
-get_room_by_exit(Exit) ->
-    gen_server:call(?MODULE, {get_room_by_exit, Exit}).
+get_room_by_exit(Exit, OldRoomId) ->
+    gen_server:call(?MODULE, {get_room_by_exit, Exit, OldRoomId}).
 
 room_players(Player) ->
     gen_server:call(?MODULE, {room_players, Player}).
@@ -78,10 +82,12 @@ init([]) ->
         codecs => [{epgsql_codec_json, jsone}]
     },
     {ok, Conn} = epgsql:connect(ConnectOpts),
-    ensure_schema(Conn),
-    init_world(Conn),
+    apply_migrations(Conn),
     {ok, #{conn => Conn}}.
 
+handle_call(apply_migrations, _From, #{conn := Conn} = State) ->
+    apply_migrations(Conn),
+    {reply, ok, State};
 handle_call({create_player, Name}, _From, #{conn := Conn} = State) ->
     {ok, 1, _Cols, [{UserId}]} = epgsql:equery(
         Conn, "INSERT INTO players (name) VALUES ($1) RETURNING id", [Name]
@@ -120,11 +126,11 @@ handle_call({player_room, Player}, _From, #{conn := Conn} = State) ->
         {ok, _, [{RoomId}]} -> {reply, RoomId, State};
         {ok, _, []} -> {reply, undefined, State}
     end;
-handle_call({get_room_by_exit, Exit}, _From, #{conn := Conn} = State) ->
+handle_call({get_room_by_exit, Exit, OldRoomId}, _From, #{conn := Conn} = State) ->
     {ok, _, [Result]} = epgsql:equery(
         Conn,
-        "SELECT r.id, r.name FROM exits e JOIN rooms r ON e.to_id = r.id WHERE e.name = $1;",
-        [Exit]
+        "SELECT to_id, name FROM exits WHERE from_id = $1 AND name ILIKE $2;",
+        [OldRoomId, Exit ++ "%"]
     ),
     {reply, Result, State};
 handle_call({room_players, Player}, _From, #{conn := Conn} = State) ->
@@ -180,14 +186,37 @@ code_change(_OldVsn, State, _Extra) ->
 
 %%--------------------------------------------------------------------
 
-ensure_schema(Conn) ->
+apply_migrations(Conn) ->
+    {ok, _, [{CurrentVersion}]} = epgsql:equery(Conn, "SELECT schema_version FROM game ORDER BY schema_version DESC LIMIT 1", []),
+    logger:info("Current schema version: ~p", [CurrentVersion]),
     PrivDir = code:priv_dir(mqttmud),
-    {ok, SchemaSql} = file:read_file(filename:join(PrivDir, "schema.sql")),
-    Results = epgsql:squery(Conn, binary_to_list(SchemaSql)),
-    [{ok, _, _} = R || R <- Results].
+    Migrations0 = filelib:wildcard(filename:join([PrivDir, "migrations", "*.sql"])),
+    Migrations1 = lists:sort(fun(A, B) -> filename:basename(A) < filename:basename(B) end, Migrations0),
+    Migrations = lists:map(
+                   fun(F) ->
+                           [Version, _] = string:split(filename:basename(F), "_"),
+                           {list_to_integer(Version), F} 
+                   end, Migrations1),
+    lists:foreach(fun(Migration) -> apply_migration(Conn, CurrentVersion, Migration) end, Migrations).
 
-init_world(Conn) ->
-    PrivDir = code:priv_dir(mqttmud),
-    {ok, WorldSql} = file:read_file(filename:join(PrivDir, "world.sql")),
-    Results = epgsql:squery(Conn, binary_to_list(WorldSql)),
-    [{ok, _} = R || R <- Results].
+apply_migration(Conn, CurrentVersion, {Version, File}) when CurrentVersion < Version ->
+    {ok, Sql} = file:read_file(File),
+    ok = epgsql:with_transaction(
+           Conn, 
+           fun(C) ->
+                   Res = epgsql:squery(C, binary_to_list(Sql)),
+                   ok = to_simple_res(Res),
+                   ok
+           end,
+           #{reraise => true}
+          );
+apply_migration(_, _, _) ->
+    ok.
+
+to_simple_res([]) -> ok;
+to_simple_res([{ok, _} | Rest]) -> to_simple_res(Rest);
+to_simple_res([{ok, _, _} | Rest]) -> to_simple_res(Rest);
+to_simple_res([{error, Error} | _]) -> {error, Error};
+to_simple_res({ok, _}) -> ok;
+to_simple_res({ok, _, _}) -> ok;
+to_simple_res({error, _}) -> error.
