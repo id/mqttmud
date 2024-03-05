@@ -385,8 +385,14 @@ handle_dmg_roll(Client, Player, Session, MonsterId, _N, _S, Result) ->
             Msg3 = <<Username/binary, " has killed the Goblin!">>,
             send_notification(Client, <<"rooms/", RoomId/binary>>, ?DM, Msg3),
             mqttmud_db:update_monster(Monster#{alive := false}),
-            mqttmud_db:set_status(Username, normal),
-            send_message(Client, <<"users/", Username/binary, "/fight">>, ?DM, <<"off">>);
+            RoomPlayers = mqttmud_db:room_players(RoomId),
+            lists:foreach(
+                fun(PlayerName) ->
+                    mqttmud_db:set_status(PlayerName, normal),
+                    send_message(Client, <<"users/", PlayerName/binary, "/fight">>, ?DM, <<"off">>)
+                end,
+                RoomPlayers
+            );
         false ->
             Msg2 = <<"Goblin's turn.">>,
             send_message(Client, <<"users/", Username/binary, "/fight">>, ?DM, Msg2),
