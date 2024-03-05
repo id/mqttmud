@@ -14,7 +14,8 @@
     check_roll/2,
     start_link/0,
     stop/0,
-    send_welcome_message/1
+    send_welcome_message/1,
+    send_cmd/4
 ]).
 
 -define(BROKER, "mqtt://localhost:1883").
@@ -112,7 +113,7 @@ handle_messsage(Client, #{topic := <<"connected">>, payload := Payload}) ->
 handle_messsage(Client, #{topic := <<"disconnected">>, payload := Payload}) ->
     #{<<"username">> := Username, <<"client_id">> := ClientId} = jsone:decode(Payload),
     logger:info("~s disconnected", [Username]),
-    RoomId = mqttmud_db:player_room(Username),
+    #{room_id := RoomId} = mqttmud_db:player_room(Username),
     delete_session(ClientId, Username, RoomId),
     send_notification(
         Client, <<"rooms/", RoomId/binary>>, ?DM, <<Username/binary, " has left the game.">>
@@ -138,6 +139,7 @@ do(<<"help">>, _, Client, #{name := Username}, #{status := normal}) ->
         "<li>say <em>message</em> - say something out loud to everyone in the room</li>"
         "<li>whisper <em>username</em> <em>message</em> - whisper something privately</li>"
         "<li>shout <em>message</em> - shout something to everyone in the game</li>"
+        "<li>fight <em>monster</em> - fight a monster that you see</li>"
         "<li>help - show this help message</li>"
         "</ul>"
     >>,
@@ -181,6 +183,8 @@ do(<<"go">>, Exit, Client, #{room_id := RoomId, name := Username}, #{status := n
         Client, <<"rooms/", NewRoomId/binary>>, ?DM, <<Username/binary, " has entered the room.">>
     ),
     send_cmd(Client, <<"users/", Username/binary>>, ?cmd_move, NewRoomName),
+    Msg = <<"You entered ", NewRoomName/binary, ".">>,
+    send_message(Client, <<"users/", Username/binary>>, ?DM, Msg),
     mqttmud_emqx_api:subscribe(ClientId, <<"rooms/", NewRoomId/binary>>);
 do(<<"go">>, _, Client, #{name := Username}, #{status := {fight, _}}) ->
     Msg = <<"You cannot use this command while fighting.">>,
@@ -189,8 +193,8 @@ do(<<"say">>, Whatever, Client, #{room_id := RoomId, name := Username}, _) ->
     send_say(Client, <<"rooms/", RoomId/binary>>, Username, Whatever);
 do(<<"whisper">>, Whatever, Client, #{room_id := RoomId, name := Username}, _) ->
     [To, Message] = binary:split(Whatever, <<" ">>),
-    ToRoom = mqttmud_db:player_room(To),
-    case RoomId =:= ToRoom of
+    #{room_id := ToRoomId} = mqttmud_db:player_room(To),
+    case RoomId =:= ToRoomId of
         true ->
             send_whisper(Client, <<"users/", To/binary, "/inbox">>, Username, Message);
         false ->
@@ -265,17 +269,18 @@ init_session(Client, Username, ClientId) ->
     case Alive of
         true ->
             ok = mqttmud_db:upsert_session(Username, ClientId),
-            Room = mqttmud_db:player_room(Username),
+            #{room_id := RoomId, room_name := RoomName} = mqttmud_db:player_room(Username),
+            mqttmud_emqx_api:subscribe(ClientId, <<"users/", Username/binary>>),
+            mqttmud_emqx_api:subscribe(ClientId, <<"users/", Username/binary, "/inbox">>),
+            mqttmud_emqx_api:subscribe(ClientId, <<"users/", Username/binary, "/fight">>),
             Message = jsone:encode(#{
                                      type => notification,
                                      from => ?DM,
                                      message => <<Username/binary, " entered the room.">>
                                     }),
-            emqtt:publish(Client, <<"rooms/", Room/binary>>, Message, 1),
-            mqttmud_emqx_api:subscribe(ClientId, <<"users/", Username/binary>>),
-            mqttmud_emqx_api:subscribe(ClientId, <<"users/", Username/binary, "/inbox">>),
-            mqttmud_emqx_api:subscribe(ClientId, <<"users/", Username/binary, "/fight">>),
-            mqttmud_emqx_api:subscribe(ClientId, <<"rooms/", Room/binary>>);
+            emqtt:publish(Client, <<"rooms/", RoomId/binary>>, Message, 1),
+            timer:apply_after(1000, ?MODULE, send_cmd, [Client, <<"users/", Username/binary>>, ?cmd_move, RoomName]),
+            mqttmud_emqx_api:subscribe(ClientId, <<"rooms/", RoomId/binary>>);
         false ->
             mqttmud_emqx_api:subscribe(ClientId, <<"users/", Username/binary, "/inbox">>),
             Message = jsone:encode(#{
@@ -377,7 +382,7 @@ handle_dmg_roll(Client, Player, Session, MonsterId, _N, _S, Result) ->
         true ->
             Msg2 = <<"You have killed the Goblin!">>,
             send_message(Client, <<"users/", Username/binary, "/fight">>, ?DM, Msg2),
-            Msg3 = <<Username/binary, " have killed the Goblin!">>,
+            Msg3 = <<Username/binary, " has killed the Goblin!">>,
             send_notification(Client, <<"rooms/", RoomId/binary>>, ?DM, Msg3),
             mqttmud_db:update_monster(Monster#{alive := false}),
             mqttmud_db:set_status(Username, normal),

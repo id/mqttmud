@@ -50,7 +50,6 @@ function handleCommand(parsedMessage) {
   const msg = parsedMessage.message;
   switch (msg.command) {
   case 'move':
-    displayMessage(parsedMessage.from, 'You entered ' + msg.message + '.', 'text-success');
     document.getElementById('room').innerHTML = msg.message;
     break;
   }
