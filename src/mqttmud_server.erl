@@ -248,13 +248,13 @@ do(<<"fight">>, MonsterName, Client, #{name := Username, room_id := RoomId}, #{s
             Msg2 = <<"Roll d20 to check for a hit.">>,
             send_message(Client, <<"users/", Username/binary>>, ?DM, Msg2)
     end;
-do(<<"fight">>, _, Client, #{name := Username}, {fight, _}) ->
+do(<<"fight">>, _, Client, #{name := Username}, #{status := {fight, _}}) ->
     Msg = <<"You are already fighting.">>,
     send_message(Client, <<"users/", Username/binary>>, ?DM, Msg);
-do(<<"run">>, _, Client, #{name := Username}, normal) ->
+do(<<"run">>, _, Client, #{name := Username}, #{status := normal}) ->
     Msg = <<"You can only run from monsters.">>,
     send_message(Client, <<"users/", Username/binary>>, ?DM, Msg);
-do(<<"run">>, _, Client, #{name := Username}, {fight, _}) ->
+do(<<"run">>, _, Client, #{name := Username}, #{status := {fight, _}}) ->
     mqttmud_db:set_status(Username, normal),
     send_message(Client, <<"users/", Username/binary>>, ?DM, <<"You cowardly ran from a fight.">>),
     send_message(Client, <<"users/", Username/binary, "/fight">>, ?DM, <<"off">>);
