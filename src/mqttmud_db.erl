@@ -319,25 +319,26 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 
 apply_migrations(Conn) ->
-    {ok, _, [{CurrentVersion}]} = epgsql:equery(
-        Conn, "SELECT schema_version FROM game ORDER BY schema_version DESC LIMIT 1", []
-    ),
+    Res = epgsql:equery(Conn, "SELECT schema_version FROM game ORDER BY schema_version DESC LIMIT 1", []),
+    CurrentVersion = case Res of
+                         {ok, _, [{V}]} -> V;
+                         {error, _} -> 0
+                     end,
     logger:info("Current schema version: ~p", [CurrentVersion]),
     PrivDir = code:priv_dir(mqttmud),
     Migrations0 = filelib:wildcard(filename:join([PrivDir, "migrations", "*.sql"])),
     Migrations1 = lists:sort(
-        fun(A, B) -> filename:basename(A) < filename:basename(B) end, Migrations0
-    ),
+                    fun(A, B) -> filename:basename(A) < filename:basename(B) end, Migrations0
+                   ),
     Migrations = lists:map(
-        fun(F) ->
-            [Version, _] = string:split(filename:basename(F), "_"),
-            {list_to_integer(Version), F}
-        end,
-        Migrations1
-    ),
-    lists:foreach(
-        fun(Migration) -> apply_migration(Conn, CurrentVersion, Migration) end, Migrations
-    ).
+                   fun(F) ->
+                           [Version, _] = string:split(filename:basename(F), "_"),
+                           {list_to_integer(Version), F}
+                   end,
+                   Migrations1
+                  ),
+    F = fun(Migration) -> apply_migration(Conn, CurrentVersion, Migration) end,
+    lists:foreach(F, Migrations).
 
 apply_migration(Conn, CurrentVersion, {Version, File}) when CurrentVersion < Version ->
     {ok, Sql} = file:read_file(File),
