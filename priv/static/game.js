@@ -1,11 +1,11 @@
 const client = mqtt.connect('ws://' + location.hostname + ':8083/mqtt', {
   username: localStorage.getItem('username'),
   password: localStorage.getItem('password'),
-  clientId: localStorage.getItem('username'),
+  clientId: localStorage.getItem('clientid'),
   resubscribe: false,
   clean: false,
   properties: {
-    sessionExpiryInterval: 86400
+    sessionExpiryInterval: 3600
   },
 });
 client.on('connect', function () {
@@ -13,6 +13,17 @@ client.on('connect', function () {
 });
 client.on('message', function (topic, message) {
   parsedMessage = JSON.parse(message.toString());
+  if (topic === 'users/' + localStorage.getItem('username') + '/fight') {
+    if (parsedMessage.message === 'on') {
+      document.getElementById('chat-history').classList.add('bg-danger-subtle');
+      document.getElementById('chat-history').classList.remove('bg-body');
+      return;
+    } else if (parsedMessage.message === 'off') {
+      document.getElementById('chat-history').classList.add('bg-body');
+      document.getElementById('chat-history').classList.remove('bg-danger-subtle');
+      return;
+    }
+  }
   switch (parsedMessage.type) {
   case 'message':
     displayMessage(parsedMessage.from, parsedMessage.message, 'text-success');
@@ -47,11 +58,13 @@ function handleCommand(parsedMessage) {
 
 function handleData(parsedMessage) {
   const msg = parsedMessage.message;
+  console.log(msg);
   switch (msg.dataType) {
   case 'look':
     playersString = msg.players.length > 0 ? msg.players.join(', ') : 'no one else';
-    exitsString = msg.exits.length > 0 ? msg.exits.join(', ') : 'none';
-    displayMessage(parsedMessage.from, 'You are in a room with ' + playersString + '. Exits are: ' + exitsString + '.', 'text-success');
+    exitsString = msg.exits.length > 0 ? '. Exits are to ' + msg.exits.join(', ') : ' and no exits.';
+    monstersString = msg.monsters.length > 0 ? ' You see a ' + msg.monsters.join(', ') + '!' : '';
+    displayMessage(parsedMessage.from, 'You are in a room with ' + playersString + exitsString + '.' + monstersString, 'text-success');
     break;
   }
 }

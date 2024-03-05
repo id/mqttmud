@@ -5,7 +5,8 @@
     start_link/0,
     create_user/2,
     subscribe/2,
-    unsubscribe/2
+    unsubscribe/2,
+    kick/1
 ]).
 
 -export([
@@ -28,6 +29,9 @@ subscribe(ClientId, Topic) ->
 
 unsubscribe(ClientId, Topic) ->
     gen_server:cast(?MODULE, {unsubscribe, ClientId, Topic}).
+
+kick(ClientId) ->
+    gen_server:cast(?MODULE, {kick, ClientId}).
 
 %% gen_server callbacks
 init([]) ->
@@ -112,11 +116,30 @@ handle_cast({unsubscribe, ClientId, Topic}, State) ->
         {ok, 204, _, _} ->
             {noreply, State};
         {ok, _StatusCode, _RespHeaders, ClientRef} ->
-            Body = jsone:decode(hackney:body(ClientRef)),
-            logger:warning("Failed to unsubscribe client ~p from ~p: ~p", [ClientId, Topic, Body]),
+            {ok, Body} = hackney:body(ClientRef),
+            JsonBody = jsone:decode(Body),
+            logger:warning("Failed to unsubscribe client ~p from ~p: ~p", [ClientId, Topic, JsonBody]),
             {noreply, State};
         Other ->
             logger:warning("Failed to unsubscribe client ~p from ~p: ~p", [ClientId, Topic, Other]),
+            {noreply, State}
+    end;
+handle_cast({kick, ClientId}, State) ->
+    ApiURL = maps:get(api_url, State),
+    KickAPI = iolist_to_binary([
+        ApiURL, "/api/v5/clients/", ClientId
+    ]),
+    Headers = maps:get(headers, State),
+    case hackney:request(delete, KickAPI, Headers) of
+        {ok, 204, _, _} ->
+            {noreply, State};
+        {ok, _StatusCode, _RespHeaders, ClientRef} ->
+            {ok, Body} = hackney:body(ClientRef),
+            JsonBody = jsone:decode(Body),
+            logger:warning("Failed to kick client ~p: ~p", [ClientId, JsonBody]),
+            {noreply, State};
+        Other ->
+            logger:warning("Failed to kick client ~p: ~p", [ClientId, Other]),
             {noreply, State}
     end;
 handle_cast(_Msg, State) ->

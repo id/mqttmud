@@ -27,9 +27,6 @@ function register() {
   const username = document.getElementById('username').value;
   const password = document.getElementById('password').value;
   
-  localStorage.setItem('username', username);
-  localStorage.setItem('password', password);
-
   fetch('/api/v1/users', {
     method: 'POST',
     headers: {
@@ -58,11 +55,12 @@ function register() {
 function login() {
   const username = document.getElementById('username').value;
   const password = document.getElementById('password').value;
+  const clientid = username + Math.random().toString(36).substring(7);
   
   const client = mqtt.connect('ws://' + location.hostname + ':8083/mqtt', {
     username: username,
     password: password,
-    clientId: username,
+    clientId: clientid,
     resubscribe: false,
     clean: false,
   });
@@ -71,6 +69,7 @@ function login() {
     client.end();
     localStorage.setItem('username', username);
     localStorage.setItem('password', password);
+    localStorage.setItem('clientid', clientid);
 
     window.location.href = 'game.html';
   });
