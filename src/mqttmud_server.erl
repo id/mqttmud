@@ -386,6 +386,9 @@ handle_dmg_roll(Client, Player, MonsterId, _N, _S, Result) ->
             Msg3 = <<Username/binary, " has killed the ", MonsterName/binary, "!">>,
             send_notification(Client, <<"rooms/", RoomId/binary>>, ?DM, Msg3),
             mqttmud_db:update_monster(Monster#{alive := false}),
+            #{hp := HP, respawn_interval_seconds := RespawnInterval} = Monster,
+            RespawnedMonster = Monster#{current_hp := HP, alive := true},
+            timer:apply_after(timer:seconds(RespawnInterval), mqttmud_db, update_monster, [RespawnedMonster]),
             RoomPlayers = mqttmud_db:room_players(RoomId),
             lists:foreach(
                 fun(PlayerName) ->
@@ -428,6 +431,9 @@ apply_damage(Client, Player, Monster, Dmg) ->
         true ->
             mqttmud_db:update_player(Player#{current_hp := NewHP, alive := false}),
             Msg = <<"You have been killed by the ", MonsterName/binary, ".">>,
+            #{hp := HP, respawn_interval_seconds := RespawnInterval} = Player,
+            RespawnedPlayer = Player#{current_hp := HP, alive := true},
+            timer:apply_after(timer:seconds(RespawnInterval), mqttmud_db, update_player, [RespawnedPlayer]),
             send_message(Client, <<"users/", Username/binary, "/fight">>, ?DM, Msg),
             send_message(Client, <<"users/", Username/binary, "/fight">>, ?DM, <<"off">>);
         false ->
