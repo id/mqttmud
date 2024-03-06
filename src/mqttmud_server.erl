@@ -136,7 +136,7 @@ do(<<"help">>, _, Client, #{name := Username}, #{status := normal}) ->
         "<ul>"
         "<li>look - examine the surroundings</li>"
         "<li>go <em>exit</em> - go through the exit specified</li>"
-        "<li>say <em>message</em> - say something out loud to everyone in the room</li>"
+        "<li>say <em>message</em> - say something out loud</li>"
         "<li>whisper <em>username</em> <em>message</em> - whisper something privately</li>"
         "<li>shout <em>message</em> - shout something to everyone in the game</li>"
         "<li>fight <em>monster</em> - fight a monster that you see</li>"
@@ -155,12 +155,14 @@ do(<<"help">>, _, Client, #{name := Username}, #{status := {fight, _}}) ->
         "</ul>"
     >>,
     send_message(Client, <<"users/", Username/binary>>, ?DM, Message);
-do(<<"look">>, _, Client, #{room_id := RoomId, name := Username}, #{status := normal}) ->
+do(<<"look">>, _, Client, Player, #{status := normal}) ->
+    #{name := Username, room_id := RoomId, room_name := RoomName} = Player,
     RoomPlayers = mqttmud_db:room_players(RoomId) -- [Username],
     RoomExits = mqttmud_db:room_exits(RoomId),
     RoomMonsters = mqttmud_db:room_monsters(RoomId),
     send_data(Client, <<"users/", Username/binary>>, ?DM, #{
         dataType => ?look,
+        roomName => RoomName,
         players => RoomPlayers,
         exits => RoomExits,
         monsters => [MonsterName || #{name := MonsterName} <- RoomMonsters]
@@ -171,21 +173,25 @@ do(<<"look">>, _, Client, #{name := Username}, #{status := {fight, _}}) ->
 do(<<"look">>, _, _Client, Player, Session) ->
     logger:warning("Look: ~p, ~p", [Player, Session]),
     {ok, Player, Session};
-do(<<"go">>, Exit, Client, #{room_id := RoomId, name := Username}, #{status := normal} = Session) ->
-    {NewRoomId, NewRoomName} = mqttmud_db:get_room_by_exit(Exit, RoomId),
-    #{client_id := ClientId} = Session,
-    mqttmud_db:move_player_to(Username, NewRoomId),
-    mqttmud_emqx_api:unsubscribe(ClientId, <<"rooms/", RoomId/binary>>),
-    send_notification(
-        Client, <<"rooms/", RoomId/binary>>, ?DM, <<Username/binary, " has left the room.">>
-    ),
-    send_notification(
-        Client, <<"rooms/", NewRoomId/binary>>, ?DM, <<Username/binary, " has entered the room.">>
-    ),
-    send_cmd(Client, <<"users/", Username/binary>>, ?cmd_move, NewRoomName),
-    Msg = <<"You entered ", NewRoomName/binary, ".">>,
-    send_message(Client, <<"users/", Username/binary>>, ?DM, Msg),
-    mqttmud_emqx_api:subscribe(ClientId, <<"rooms/", NewRoomId/binary>>);
+do(<<"go">>, Exit, Client, Player, #{status := normal} = Session) ->
+    #{name := Username, room_id := RoomId, room_name := RoomName} = Player,
+    case mqttmud_db:get_room_by_exit(Exit, RoomId) of
+        {ok, #{room_id := NewRoomId, room_name := NewRoomName}} ->
+            #{client_id := ClientId} = Session,
+            mqttmud_db:move_player_to(Username, NewRoomId),
+            mqttmud_emqx_api:unsubscribe(ClientId, <<"rooms/", RoomId/binary>>),
+            Msg1 = <<Username/binary, " has left ", RoomName/binary, ".">>,
+            send_notification(Client, <<"rooms/", RoomId/binary>>, ?DM, Msg1),
+            Msg2 = <<Username/binary, " has entered ", NewRoomName/binary, ".">>,
+            send_notification(Client, <<"rooms/", NewRoomId/binary>>, ?DM, Msg2),
+            send_cmd(Client, <<"users/", Username/binary>>, ?cmd_move, NewRoomName),
+            Msg3 = <<"You entered ", NewRoomName/binary, ".">>,
+            send_message(Client, <<"users/", Username/binary>>, ?DM, Msg3),
+            mqttmud_emqx_api:subscribe(ClientId, <<"rooms/", NewRoomId/binary>>);
+        {error, wrong_exit} ->
+            Msg1 = <<"No such exit.">>,
+            send_message(Client, <<"users/", Username/binary>>, ?DM, Msg1)
+    end;
 do(<<"go">>, _, Client, #{name := Username}, #{status := {fight, _}}) ->
     Msg = <<"You cannot use this command while fighting.">>,
     send_message(Client, <<"users/", Username/binary>>, ?DM, Msg);
@@ -198,7 +204,7 @@ do(<<"whisper">>, Whatever, Client, #{room_id := RoomId, name := Username}, _) -
         true ->
             send_whisper(Client, <<"users/", To/binary, "/inbox">>, Username, Message);
         false ->
-            Msg = <<"You can only whisper with someone in the same room.">>,
+            Msg = <<"You can only whisper to someone near.">>,
             send_message(Client, <<"users/", Username/binary>>, ?DM, Msg)
     end;
 do(<<"shout">>, Whatever, Client, #{name := Username}, _) ->
@@ -209,15 +215,15 @@ do(<<"shout">>, Whatever, Client, #{name := Username}, _) ->
         end,
         Players
     );
-do(<<"roll">>, Dice, Client, #{name := Username} = Player, #{status := {fight, MonsterId}} = Session) ->
+do(<<"roll">>, Dice, Client, #{name := Username} = Player, #{status := {fight, MonsterId}}) ->
     #{dmg := Dmg} = Player,
     case roll_dice(Dice) of
         {ok, {1, 20, Result}} ->
             %% hit roll
-            handle_hit_roll(Client, Player, Session, MonsterId, Result);
+            handle_hit_roll(Client, Player, MonsterId, Result);
         {ok, {N, S, Result}} when Dice =:= Dmg ->
             %% attack roll
-            handle_dmg_roll(Client, Player, Session, MonsterId, N, S, Result);
+            handle_dmg_roll(Client, Player, MonsterId, N, S, Result);
         Res ->
             logger:warning("Invalid roll: ~p", [Res]),
             send_message(Client, <<"users/", Username/binary, "/fight">>, ?DM, <<"Invalid roll.">>)
@@ -225,28 +231,23 @@ do(<<"roll">>, Dice, Client, #{name := Username} = Player, #{status := {fight, M
 do(<<"roll">>, Dice, Client, #{name := Username}, #{status := normal}) ->
     case roll_dice(Dice) of
         {ok, {_, _, Result}} ->
-            Msg = list_to_binary(integer_to_list(Result)),
+            Msg = ?int2bin(Result),
             send_message(Client, <<"users/", Username/binary>>, ?DM, Msg);
         _ ->
             send_message(Client, <<"users/", Username/binary>>, ?DM, <<"Invalid roll.">>)
     end;
-do(<<"fight">>, MonsterName, Client, #{name := Username, room_id := RoomId}, #{status := normal}) ->
-    Monsters = mqttmud_db:room_monsters(RoomId),
-    SearchFun = fun
-        (#{name := Name}) when Name =:= MonsterName -> true;
-        (_) -> false
-    end,
-    case lists:search(SearchFun, Monsters) of
-        false ->
-            Msg = <<"There is no ", MonsterName/binary, " nearby.">>,
-            send_message(Client, <<"users/", Username/binary>>, ?DM, Msg);
-        {value, #{id := MonsterId}} ->
+do(<<"fight">>, MonsterMatch, Client, #{name := Username, room_id := RoomId}, #{status := normal}) ->
+    case mqttmud_db:find_monster_in_room(RoomId, MonsterMatch) of
+        {ok, #{id := MonsterId, name := MonsterName}} ->
             mqttmud_db:set_status(Username, {fight, MonsterId}),
             send_message(Client, <<"users/", Username/binary, "/fight">>, ?DM, <<"on">>),
             Msg1 = <<"You are fighting ", MonsterName/binary, ".">>,
             send_message(Client, <<"users/", Username/binary>>, ?DM, Msg1),
             Msg2 = <<"Roll d20 to check for a hit.">>,
-            send_message(Client, <<"users/", Username/binary>>, ?DM, Msg2)
+            send_message(Client, <<"users/", Username/binary>>, ?DM, Msg2);
+        {error, not_found} ->
+            Msg = <<"There is no ", MonsterMatch/binary, " nearby.">>,
+            send_message(Client, <<"users/", Username/binary>>, ?DM, Msg)
     end;
 do(<<"fight">>, _, Client, #{name := Username}, #{status := {fight, _}}) ->
     Msg = <<"You are already fighting.">>,
@@ -276,7 +277,7 @@ init_session(Client, Username, ClientId) ->
             Message = jsone:encode(#{
                                      type => notification,
                                      from => ?DM,
-                                     message => <<Username/binary, " entered the room.">>
+                                     message => <<Username/binary, " entered ", RoomName/binary, ".">>
                                     }),
             emqtt:publish(Client, <<"rooms/", RoomId/binary>>, Message, 1),
             timer:apply_after(1000, ?MODULE, send_cmd, [Client, <<"users/", Username/binary>>, ?cmd_move, RoomName]),
@@ -353,9 +354,9 @@ check_roll(N, Sides) ->
     logger:warning("Invalid roll: ~p d~p", [N, Sides]),
     {error, invalid_roll}.
 
-handle_hit_roll(Client, Player, Session, MonsterId, Result) ->
+handle_hit_roll(Client, Player, MonsterId, Result) ->
     Monster = mqttmud_db:get_monster(MonsterId),
-    #{ac := MonsterAC} = Monster,
+    #{name := MonsterName, ac := MonsterAC} = Monster,
     #{name := Username, dmg := PlayerDMG} = Player,
     case Result >= MonsterAC of
         true ->
@@ -364,25 +365,25 @@ handle_hit_roll(Client, Player, Session, MonsterId, Result) ->
             Msg2 = <<"Now roll ", PlayerDMG/binary, " for damage.">>,
             send_message(Client, <<"users/", Username/binary, "/fight">>, ?DM, Msg2);
         false ->
-            Msg = <<?int2bin(Result)/binary, ". You missed! Now it's Goblin's turn.">>,
+            Msg = <<?int2bin(Result)/binary, ". You missed! Now it's ", MonsterName/binary, "'s turn.">>,
             send_message(Client, <<"users/", Username/binary, "/fight">>, ?DM, Msg),
-            monster_turn(Client, Player, Session, Monster)
+            monster_turn(Client, Player, Monster)
     end.
 
-handle_dmg_roll(Client, Player, Session, MonsterId, _N, _S, Result) ->
+handle_dmg_roll(Client, Player, MonsterId, _N, _S, Result) ->
     #{name := Username, room_id := RoomId, dmg_mod := PlayerDmgMod} = Player,
     Monster = mqttmud_db:get_monster(MonsterId),
-    #{current_hp := HP} = Monster,
+    #{name := MonsterName, current_hp := HP} = Monster,
     Dmg = Result + PlayerDmgMod,
     NewHP = HP - Dmg,
-    Msg = <<"You deal ", ?int2bin(Dmg)/binary, " damage to the Goblin.">>,
+    Msg = <<"You deal ", ?int2bin(Dmg)/binary, " damage to the ", MonsterName/binary, ".">>,
     mqttmud_db:update_monster(Monster#{current_hp := NewHP}),
     send_message(Client, <<"users/", Username/binary, "/fight">>, ?DM, Msg),
     case NewHP =< 0 of
         true ->
-            Msg2 = <<"You have killed the Goblin!">>,
+            Msg2 = <<"You have killed the ", MonsterName/binary, "!">>,
             send_message(Client, <<"users/", Username/binary, "/fight">>, ?DM, Msg2),
-            Msg3 = <<Username/binary, " has killed the Goblin!">>,
+            Msg3 = <<Username/binary, " has killed the ", MonsterName/binary, "!">>,
             send_notification(Client, <<"rooms/", RoomId/binary>>, ?DM, Msg3),
             mqttmud_db:update_monster(Monster#{alive := false}),
             RoomPlayers = mqttmud_db:room_players(RoomId),
@@ -394,41 +395,45 @@ handle_dmg_roll(Client, Player, Session, MonsterId, _N, _S, Result) ->
                 RoomPlayers
             );
         false ->
-            Msg2 = <<"Goblin's turn.">>,
+            Msg2 = <<MonsterName/binary, "'s turn.">>,
             send_message(Client, <<"users/", Username/binary, "/fight">>, ?DM, Msg2),
-            monster_turn(Client, Player, Session, Monster)
+            monster_turn(Client, Player, Monster)
     end.
 
-apply_damage(Client, Player, _Session, Dmg) ->
+monster_turn(Client, Player, Monster) ->
+    #{name := Username, ac := PlayerAC} = Player,
+    #{name := MonsterName, 
+      atk_mod := MosnterAtkMod, 
+      dmg := MonsterDmg, 
+      dmg_mod := MonsterDmgMod} = Monster,
+    case roll_dice(<<"1d20">>) of
+        {ok, {1, 20, Result}} when (Result + MosnterAtkMod) >= PlayerAC ->
+            Msg = <<?int2bin(Result)/binary, ". ", MonsterName/binary, " has hit you!">>,
+            send_message(Client, <<"users/", Username/binary, "/fight">>, ?DM, Msg),
+            {ok, {_, _, Result2}} = roll_dice(MonsterDmg),
+            Dmg = Result2 + MonsterDmgMod,
+            Msg3 = <<MonsterName/binary, " deals ", ?int2bin(Dmg)/binary, " damage to you.">>,
+            send_message(Client, <<"users/", Username/binary, "/fight">>, ?DM, Msg3),
+            apply_damage(Client, Player, Monster, Dmg);
+        {ok, {1, 20, Result2}} ->
+            Msg2 = <<?int2bin(Result2)/binary, ". ", MonsterName/binary, " missed! Your turn.">>,
+            send_message(Client, <<"users/", Username/binary, "/fight">>, ?DM, Msg2)
+    end.
+
+apply_damage(Client, Player, Monster, Dmg) ->
     #{name := Username, current_hp := HP} = Player,
+    #{name := MonsterName} = Monster,
     NewHP = HP - Dmg,
     case NewHP =< 0 of
         true ->
             mqttmud_db:update_player(Player#{current_hp := NewHP, alive := false}),
-            Msg = <<"You have been killed by the Goblin.">>,
+            Msg = <<"You have been killed by the ", MonsterName/binary, ".">>,
             send_message(Client, <<"users/", Username/binary, "/fight">>, ?DM, Msg),
             send_message(Client, <<"users/", Username/binary, "/fight">>, ?DM, <<"off">>);
         false ->
             mqttmud_db:update_player(Player#{current_hp := NewHP}),
             Msg = <<"You have ", ?int2bin(NewHP)/binary, " HP left. Your turn.">>,
             send_message(Client, <<"users/", Username/binary, "/fight">>, ?DM, Msg)
-    end.
-
-monster_turn(Client, Player, Session, Monster) ->
-    #{name := Username, ac := PlayerAC} = Player,
-    #{atk_mod := MosnterAtkMod, dmg := MonsterDmg, dmg_mod := MonsterDmgMod} = Monster,
-    case roll_dice(<<"1d20">>) of
-        {ok, {1, 20, Result}} when (Result + MosnterAtkMod) >= PlayerAC ->
-            Msg = <<?int2bin(Result)/binary, ". Goblin has hit you!">>,
-            send_message(Client, <<"users/", Username/binary, "/fight">>, ?DM, Msg),
-            {ok, {_, _, Result2}} = roll_dice(MonsterDmg),
-            Dmg = Result2 + MonsterDmgMod,
-            Msg3 = <<"Goblin deals ", ?int2bin(Dmg)/binary, " damage to you.">>,
-            send_message(Client, <<"users/", Username/binary, "/fight">>, ?DM, Msg3),
-            apply_damage(Client, Player, Session, Dmg);
-        {ok, {1, 20, Result2}} ->
-            Msg2 = <<?int2bin(Result2)/binary, ". Goblin missed! Your turn.">>,
-            send_message(Client, <<"users/", Username/binary, "/fight">>, ?DM, Msg2)
     end.
 
 delete_session(ClientId, Username, RoomId) ->

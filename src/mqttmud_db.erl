@@ -29,6 +29,7 @@
     active_players/0,
     update_player/1,
     get_monster/1,
+    find_monster_in_room/2,
     update_monster/1,
     start_link/0,
     stop/0
@@ -91,6 +92,9 @@ update_player(Player) ->
 get_monster(Id) ->
     gen_server:call(?MODULE, {get_monster, Id}).
 
+find_monster_in_room(RoomId, MonsterName) ->
+    gen_server:call(?MODULE, {find_monster_in_room, RoomId, MonsterName}).
+
 update_monster(Monster) ->
     gen_server:call(?MODULE, {update_monster, Monster}).
 
@@ -125,14 +129,15 @@ handle_call({create_player, Name}, _From, #{conn := Conn} = State) ->
     ),
     {reply, ok, State};
 handle_call({get_player, Name}, _From, #{conn := Conn} = State) ->
-    {ok, _, [{RoomId, Name, HP, CurrentHP, Alive, AC, Dmg, DmgMod, Level}]} = epgsql:equery(
+    {ok, _, [{Name, RoomId, RoomName, HP, CurrentHP, Alive, AC, Dmg, DmgMod, Level}]} = epgsql:equery(
         Conn,
-        "SELECT r.id,p.name,p.hp,p.current_hp,p.alive,p.ac,p.dmg,p.dmg_mod,p.level FROM rooms r JOIN room_players rp ON r.id = rp.room_id JOIN players p ON rp.player_id = p.id WHERE p.name = $1",
+        "SELECT p.name,r.id,r.name,p.hp,p.current_hp,p.alive,p.ac,p.dmg,p.dmg_mod,p.level FROM rooms r JOIN room_players rp ON r.id = rp.room_id JOIN players p ON rp.player_id = p.id WHERE p.name = $1",
         [Name]
     ),
     {reply,
         #{
             room_id => RoomId,
+            room_name => RoomName,
             name => Name,
             hp => HP,
             current_hp => CurrentHP,
@@ -201,12 +206,14 @@ handle_call({player_room, Player}, _From, #{conn := Conn} = State) ->
         {ok, _, []} -> {reply, undefined, State}
     end;
 handle_call({get_room_by_exit, Exit, OldRoomId}, _From, #{conn := Conn} = State) ->
-    {ok, _, [Result]} = epgsql:equery(
+    case epgsql:equery(
         Conn,
         "SELECT to_id, name FROM exits WHERE from_id = $1 AND name ILIKE $2;",
         [OldRoomId, <<Exit/binary, "%">>]
-    ),
-    {reply, Result, State};
+    ) of
+        {ok, _, [{RoomId, RoomName}]} -> {reply, {ok, #{room_id => RoomId, room_name => RoomName}}, State};
+        {ok, _, []} -> {reply, {error, wrong_exit}, State}
+    end;
 handle_call({room_players, RoomId}, _From, #{conn := Conn} = State) ->
     {ok, _, Result} = epgsql:equery(
         Conn,
@@ -270,6 +277,31 @@ handle_call({get_monster, Id}, _From, #{conn := Conn} = State) ->
             respawn_interval_seconds => RespawnInterval
         },
         State};
+handle_call({find_monster_in_room, RoomId, MonsterName}, _From, #{conn := Conn} = State) ->
+    logger:info("find_monster_in_room ~p ~p", [RoomId, MonsterName]),
+    case epgsql:equery(
+        Conn,
+        "SELECT id, name, hp, ac, xp, atk_mod, dmg, dmg_mod, current_hp, alive, respawn_interval_seconds FROM monsters WHERE room_id = $1 and name ILIKE $2;",
+        [RoomId, <<MonsterName/binary, "%">>]
+    ) of
+        {ok, _, [{Id, Name, HP, AC, XP, AttackMod, Dmg, DmgMod, CurrentHP, Alive, RespawnInterval}]} ->
+            Monster = #{
+               id => Id,
+               name => Name,
+               hp => HP,
+               ac => AC,
+               xp => XP,
+               atk_mod => AttackMod,
+               dmg => Dmg,
+               dmg_mod => DmgMod,
+               current_hp => CurrentHP,
+               alive => Alive,
+               respawn_interval_seconds => RespawnInterval
+              },
+            {reply, {ok, Monster}, State};
+        {ok, _, []} ->
+            {reply, {error, not_found}, State}
+    end;
 handle_call({update_monster, Monster}, _From, #{conn := Conn} = State) ->
     #{id := Id, current_hp := CurrentHP, alive := Alive} = Monster,
     {ok, 1} = epgsql:equery(

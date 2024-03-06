@@ -62,8 +62,13 @@ function handleData(parsedMessage) {
   case 'look':
     playersString = msg.players.length > 0 ? msg.players.join(', ') : 'no one else';
     exitsString = msg.exits.length > 0 ? '. Exits are to ' + msg.exits.join(', ') : ' and no exits.';
-    monstersString = msg.monsters.length > 0 ? ' You see a ' + msg.monsters.join(', ') + '!' : '';
-    displayMessage(parsedMessage.from, 'You are in a room with ' + playersString + exitsString + '.' + monstersString, 'text-success');
+    monstersString = '';
+    if (msg.monsters.length === 1) {
+      monstersString = ' You see a ' + msg.monsters[0] + '!';
+    } else if (msg.monsters.length > 1) {
+      monstersString = ' You see a group of monsters: ' + msg.monsters.join(', ') + '!';
+    }
+    displayMessage(parsedMessage.from, 'You are at ' + msg.roomName + ' with ' + playersString + exitsString + '.' + monstersString, 'text-success');
     break;
   }
 }
