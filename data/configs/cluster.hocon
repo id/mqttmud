@@ -41,7 +41,7 @@ rule_engine {
           args {
             mqtt_properties {}
             payload = "{\"username\": \"${username}\", \"client_id\": \"${clientid}\"}"
-            qos = 0
+            qos = 2
             retain = false
             topic = disconnected
             user_properties = ""
@@ -52,6 +52,7 @@ rule_engine {
       description = ""
       enable = true
       metadata {created_at = 1709221085171}
+      name = ""
       sql = "SELECT\n  username, clientid\nFROM\n  \"$events/client_disconnected\""
     }
     rule_o2qz {
@@ -60,7 +61,7 @@ rule_engine {
           args {
             mqtt_properties {}
             payload = "{\"username\": \"${username}\", \"client_id\": \"${clientid}\"}"
-            qos = 1
+            qos = 2
             retain = false
             topic = connected
             user_properties = ""
@@ -71,6 +72,7 @@ rule_engine {
       description = ""
       enable = true
       metadata {created_at = 1709221052497}
+      name = ""
       sql = "SELECT\n  username, clientid\nFROM\n  \"$events/client_connected\""
     }
   }

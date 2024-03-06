@@ -60,7 +60,7 @@ init([]) ->
     {ok, Client} = emqtt:start_link(ClientOpts),
     {ok, _Props} = emqtt:connect(Client),
     pong = emqtt:ping(Client),
-    SubOpts = [{qos, 1}],
+    SubOpts = [{qos, 2}],
     {ok, _, _} =
         emqtt:subscribe(
             Client,
@@ -88,7 +88,7 @@ handle_cast({send_welcome_message, Username}, #{client := Client} = State) ->
             <<"Welcome to the game, ", Username/binary,
                 "! Type 'help' for a list of commands. Have fun!">>
     }),
-    emqtt:publish(Client, <<"users/", Username/binary>>, Message, [{qos, 1}, {retain, true}]),
+    emqtt:publish(Client, <<"users/", Username/binary, "/inbox">>, Message, [{qos, 1}, {retain, true}]),
     {noreply, State};
 handle_cast(_Msg, State) ->
     {noreply, State}.
@@ -112,12 +112,16 @@ handle_messsage(Client, #{topic := <<"connected">>, payload := Payload}) ->
     init_session(Client, Username, ClientId);
 handle_messsage(Client, #{topic := <<"disconnected">>, payload := Payload}) ->
     #{<<"username">> := Username, <<"client_id">> := ClientId} = jsone:decode(Payload),
-    logger:info("~s disconnected", [Username]),
-    #{room_id := RoomId} = mqttmud_db:player_room(Username),
-    delete_session(ClientId, Username, RoomId),
-    send_notification(
-        Client, <<"rooms/", RoomId/binary>>, ?DM, <<Username/binary, " has left the game.">>
-    );
+    case mqttmud_db:session_exists(Username, ClientId) of
+        true ->
+            logger:info("~s disconnected", [Username]),
+            #{room_id := RoomId} = mqttmud_db:player_room(Username),
+            delete_session(ClientId, Username, RoomId),
+            Msg = <<Username/binary, " has left the game.">>,
+            send_notification(Client, <<"rooms/", RoomId/binary>>, ?DM, Msg);
+        false ->
+            ok
+    end;
 handle_messsage(Client, #{topic := Topic, payload := Payload}) ->
     [<<"game">>, Username] = binary:split(Topic, <<"/">>, [global]),
     Player = mqttmud_db:get_player(Username),
@@ -315,7 +319,7 @@ send_shout(Client, Topic, From, Message) ->
 
 publish(Client, Topic, From, Type, Message) ->
     Payload = jsone:encode(#{type => Type, from => From, message => Message}),
-    emqtt:publish(Client, Topic, Payload, 1).
+    emqtt:publish(Client, Topic, Payload, 2).
 
 roll_dice(Dice) ->
     case binary:split(string:lowercase(Dice), <<"d">>) of
@@ -444,7 +448,7 @@ apply_damage(Client, Player, Monster, Dmg) ->
 
 delete_session(ClientId, Username, RoomId) ->
     mqttmud_emqx_api:unsubscribe(ClientId, <<"rooms/", RoomId/binary>>),
-    mqttmud_emqx_api:unsubscribe(ClientId, <<"users/", Username/binary>>),
     mqttmud_emqx_api:unsubscribe(ClientId, <<"users/", Username/binary, "/inbox">>),
     mqttmud_emqx_api:unsubscribe(ClientId, <<"users/", Username/binary, "/fight">>),
+    mqttmud_emqx_api:unsubscribe(ClientId, <<"users/", Username/binary>>),
     ok = mqttmud_db:delete_session(Username).

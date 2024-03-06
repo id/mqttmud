@@ -16,6 +16,7 @@
     create_player/1,
     get_player/1,
     get_session/1,
+    session_exists/2,
     upsert_session/2,
     delete_session/1,
     set_status/2,
@@ -61,6 +62,9 @@ player_client_id(Username) ->
 
 delete_session(Username) ->
     gen_server:call(?MODULE, {delete_session, Username}).
+
+session_exists(Username, ClientId) ->
+    gen_server:call(?MODULE, {session_exists, Username, ClientId}).
 
 set_status(Username, Status) ->
     gen_server:call(?MODULE, {set_status, Username, Status}).
@@ -159,6 +163,15 @@ handle_call({get_session, Username}, _From, #{conn := Conn} = State) ->
         <<"normal">> -> normal
     end,
     {reply, #{client_id => ClientId, status => Status, monster_id => MonsterId}, State};
+handle_call({session_exists, Username, ClientId}, _From, #{conn := Conn} = State) ->
+    case epgsql:equery(
+        Conn,
+        "SELECT COUNT(*) FROM sessions WHERE player_id = (SELECT id FROM players WHERE name = $1) and client_id = $2;",
+        [Username, ClientId]
+    ) of
+        {ok, _, [{0}]} -> {reply, false, State};
+        {ok, _, [_]} -> {reply, true, State}
+    end;
 handle_call({upsert_session, Username, ClientId}, _From, #{conn := Conn} = State) ->
     {ok, 1} = epgsql:equery(
         Conn,
