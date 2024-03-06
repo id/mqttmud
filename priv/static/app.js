@@ -25,7 +25,32 @@ function generatePassword() {
 
 function register() {
   const username = document.getElementById('username').value;
+  if (username.includes(' ')) {
+    document.getElementById('alertText').innerHTML = 'Username cannot contain spaces.';
+    document.getElementById('alert').style.visibility = 'visible';
+    return;
+  }
+  if (username.length < 2) {
+    document.getElementById('alertText').innerHTML = 'Min username length is 2 characters.';
+    document.getElementById('alert').style.visibility = 'visible';
+    return;
+  }
+  if (username.length > 128) {
+    document.getElementById('alertText').innerHTML = 'Max username length is 128 characters.';
+    document.getElementById('alert').style.visibility = 'visible';
+    return;
+  }
   const password = document.getElementById('password').value;
+  if (password.length > 128) {
+    document.getElementById('alertText').innerHTML = 'Max password length is 128 characters.';
+    document.getElementById('alert').style.visibility = 'visible';
+    return;
+  }
+  if (password.length < 2) {
+    document.getElementById('alertText').innerHTML = 'Min password length is 2 characters.';
+    document.getElementById('alert').style.visibility = 'visible';
+    return;
+  }
   
   fetch('/api/v1/users', {
     method: 'POST',
