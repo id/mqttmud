@@ -7,6 +7,7 @@ services:
     environment:
       - "EMQX_NODE_NAME=emqx@node1.emqx.io"
       - "EMQX_DASHBOARD__DEFAULT_PASSWORD=admin"
+      - "EMQX_API_KEY__BOOTSTRAP_FILE=/opt/emqx/data/bootstrap_api_keys.txt"
     networks:
       emqx-bridge:
         aliases:

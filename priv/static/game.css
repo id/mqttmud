@@ -1,5 +1,5 @@
 .header {
-  padding-bottom: 20px;
+  margin-bottom: 5px;
 }
 
 .header h3 {
@@ -8,50 +8,53 @@
   line-height: 40px;
 }
 
-.container-narrow > hr {
-  margin: 30px 0;
+.header button {
+  margin-top: 5px;
+  margin-bottom: 0;
+  display: block;
 }
 
-@media screen and (min-width: 768px) {
+.chat-history {
+  height: 400px;
+  overflow-y: auto;
+  padding: 10px;
+  margin-bottom: 20px;
+}
+
+.chat-message {
+  padding: 5px;
+  margin-bottom: 5px;
+  border-radius: 5px;
+  display: block;
+  width: fit-content;
+}
+
+.self {
+  text-align: right;
+  margin-left: auto;
+}
+
+.other {
+  text-align: left;
+  margin-right: auto;
+}
+
+.sender {
+  font-size: 0.8em;
+  font-weight: bold;
+}
+
+@media screen and (min-width: 800px) {
   .header,
   .footer {
     padding-right: 0;
     padding-left: 0;
   }
   .header {
-    margin-bottom: 30px;
+    margin-bottom: 5px;
   }
   .chat-history {
     border-bottom: 0;
   }
 }
 
-.chat-history {
-    height: 400px;
-    overflow-y: auto;
-    padding: 10px;
-    margin-bottom: 20px;
-}
-
-.chat-message {
-    padding: 5px;
-    margin-bottom: 5px;
-    border-radius: 5px;
-    display: block;
-    width: fit-content;
-}
-
-.self {
-    text-align: right;
-    margin-left: auto;
-}
-
-.other {
-    text-align: left;
-    margin-right: auto;
-}
-
-.sender {
-    font-size: 0.8em;
-    font-weight: bold;
-}

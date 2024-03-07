@@ -36,23 +36,14 @@ kick(ClientId) ->
 %% gen_server callbacks
 init([]) ->
     EmqxAPI = application:get_env(mqttmud, emqx_api_url, "http://localhost:18083"),
-    EmqxAPIUser = application:get_env(mqttmud, emqx_api_user, "admin"),
-    EmqxAPIPassword = application:get_env(mqttmud, emqx_api_password, "public"),
+    APIKey = application:get_env(mqttmud, emqx_api_key, "mqttmud"),
+    APISecret = application:get_env(mqttmud, emqx_api_secret, "secret"),
     Headers = [
         {<<"Content-Type">>, <<"application/json">>},
         {<<"Accept">>, <<"application/json">>}
     ],
-    EmqxLoginAPI = iolist_to_binary([EmqxAPI, "/api/v5/login"]),
-    Payload = jsone:encode([{username, EmqxAPIUser}, {password, EmqxAPIPassword}]),
-    {ok, 200, _, ClientRef} = hackney:request(post, EmqxLoginAPI, Headers, Payload),
-    {ok, Body} = hackney:body(ClientRef),
-    #{<<"token">> := AuthToken} = jsone:decode(Body),
-    AuthHeaders = [
-        {<<"Content-Type">>, <<"application/json">>},
-        {<<"Accept">>, <<"application/json">>},
-        {<<"Authorization">>, iolist_to_binary(["Bearer ", AuthToken])}
-    ],
-    {ok, #{api_url => EmqxAPI, headers => AuthHeaders}}.
+    Opts = [{basic_auth, {APIKey, APISecret}}],
+    {ok, #{api_url => EmqxAPI, headers => Headers, opts => Opts}}.
 
 handle_call({create_user, Username, Password}, _From, State) ->
     ApiURL = maps:get(api_url, State),
@@ -60,8 +51,9 @@ handle_call({create_user, Username, Password}, _From, State) ->
         ApiURL, "/api/v5/authentication/password_based:built_in_database/users"
     ]),
     Headers = maps:get(headers, State),
+    Opts = maps:get(opts, State),
     Payload = jsone:encode(#{user_id => Username, password => Password}),
-    case hackney:request(post, EmqxUsersAPI, Headers, Payload) of
+    case hackney:request(post, EmqxUsersAPI, Headers, Payload, Opts) of
         {ok, 201, _, _} ->
             mqttmud_db:create_player(Username),
             mqttmud_server:send_welcome_message(Username),
@@ -93,8 +85,9 @@ handle_cast({subscribe, ClientId, Topic}, State) ->
         ApiURL, "/api/v5/clients/", ClientId, "/subscribe"
     ]),
     Headers = maps:get(headers, State),
+    Opts = maps:get(opts, State),
     Payload = jsone:encode(#{topic => Topic, qos => 1}),
-    case hackney:request(post, SubscribeAPI, Headers, Payload) of
+    case hackney:request(post, SubscribeAPI, Headers, Payload, Opts) of
         {ok, 200, _, _} ->
             {noreply, State};
         {ok, 401, _, ClientRef} ->
@@ -111,8 +104,9 @@ handle_cast({unsubscribe, ClientId, Topic}, State) ->
         ApiURL, "/api/v5/clients/", ClientId, "/unsubscribe"
     ]),
     Headers = maps:get(headers, State),
+    Opts = maps:get(opts, State),
     Payload = jsone:encode(#{topic => Topic}),
-    case hackney:request(post, UnsubscribeAPI, Headers, Payload) of
+    case hackney:request(post, UnsubscribeAPI, Headers, Payload, Opts) of
         {ok, 204, _, _} ->
             {noreply, State};
         {ok, _StatusCode, _RespHeaders, ClientRef} ->
@@ -130,7 +124,8 @@ handle_cast({kick, ClientId}, State) ->
         ApiURL, "/api/v5/clients/", ClientId
     ]),
     Headers = maps:get(headers, State),
-    case hackney:request(delete, KickAPI, Headers) of
+    Opts = maps:get(opts, State),
+    case hackney:request(delete, KickAPI, Headers, <<>>, Opts) of
         {ok, 204, _, _} ->
             {noreply, State};
         {ok, _StatusCode, _RespHeaders, ClientRef} ->
