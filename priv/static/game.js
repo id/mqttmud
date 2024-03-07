@@ -3,7 +3,7 @@ const client = mqtt.connect('ws://' + location.hostname + ':8083/mqtt', {
   password: localStorage.getItem('password'),
   clientId: localStorage.getItem('clientid'),
   resubscribe: false,
-  clean: false,
+  clean: true,
   properties: {
     sessionExpiryInterval: 3600
   },

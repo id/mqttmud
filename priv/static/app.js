@@ -87,7 +87,7 @@ function login() {
     password: password,
     clientId: clientid,
     resubscribe: false,
-    clean: false,
+    clean: true,
   });
   client.on('connect', function () {
     console.log('Logged in successfully.');
