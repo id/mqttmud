@@ -1,0 +1,43 @@
+body, html {
+    height: 100%;
+    margin: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.container {
+    display: grid;
+    width: 100%;
+    /* grid-template-rows: 10% 80% 10%; /\* Heights of header, body, and footer *\/ */
+    grid-template-columns: 100%;
+    box-shadow: 0 0 10px rgba(0,0,0,0.5);
+    background: #fff;
+}
+
+.footer-container {
+    display: grid;
+    grid-template-columns: 25% 25% 25% 25%;
+    justify-content: center;
+    align-items: center;
+    display: flex;
+}
+
+.footer-container > a {
+    margin: auto;
+}
+
+.footer-container > a > img {
+    height: 24px;
+}
+
+header, main, footer {
+    border: 1px solid #ccc;
+    padding: 10px;
+    margin-top: 10px;
+    margin-bottom: 10px;
+}
+
+main {
+    overflow: auto;
+}
