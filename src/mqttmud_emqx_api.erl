@@ -90,10 +90,15 @@ handle_cast({subscribe, ClientId, Topic}, State) ->
     case hackney:request(post, SubscribeAPI, Headers, Payload, Opts) of
         {ok, 200, _, _} ->
             {noreply, State};
-        {ok, 401, _, ClientRef} ->
+        {ok, StatusCode, _, ClientRef} when StatusCode >= 400, StatusCode < 500 ->
             {ok, Body} = hackney:body(ClientRef),
-            logger:warning("Failed to subscribe client ~p to ~p: ~p", [ClientId, Topic, Body]),
-            {noreply, State};
+            case jsone:decode(Body) of
+                #{<<"code">> := <<"CLIENTID_NOT_FOUND">>} ->
+                    {noreply, State};
+                #{<<"code">> := Code, <<"message">> := Message} ->
+                    logger:warning("Failed to subscribe client ~p to ~p: [~s] ~s", [ClientId, Topic, Code, Message]),
+                    {noreply, State}
+            end;
         Other ->
             logger:error("Failed to subscribe client ~p to ~p: ~p", [ClientId, Topic, Other]),
             {noreply, State}
@@ -109,11 +114,15 @@ handle_cast({unsubscribe, ClientId, Topic}, State) ->
     case hackney:request(post, UnsubscribeAPI, Headers, Payload, Opts) of
         {ok, 204, _, _} ->
             {noreply, State};
-        {ok, _StatusCode, _RespHeaders, ClientRef} ->
+        {ok, StatusCode, _, ClientRef} when StatusCode >= 400, StatusCode < 500 ->
             {ok, Body} = hackney:body(ClientRef),
-            JsonBody = jsone:decode(Body),
-            logger:warning("Failed to unsubscribe client ~p from ~p: ~p", [ClientId, Topic, JsonBody]),
-            {noreply, State};
+            case jsone:decode(Body) of
+                #{<<"code">> := <<"CLIENTID_NOT_FOUND">>} ->
+                    {noreply, State};
+                #{<<"code">> := Code, <<"message">> := Message} ->
+                    logger:warning("Failed to unsubscribe client ~p from ~p: [~s] ~s", [ClientId, Topic, Code, Message]),
+                    {noreply, State}
+            end;
         Other ->
             logger:warning("Failed to unsubscribe client ~p from ~p: ~p", [ClientId, Topic, Other]),
             {noreply, State}
