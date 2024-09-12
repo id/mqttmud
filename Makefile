@@ -26,6 +26,9 @@ test: eunit ct cover
 clean:
 	@rm -rf _build erl_crash.dump rebar3.crashdump rebar.lock rebar3
 
+clean-data:
+	@rm -rf data/{cluster.uuid,node.uuid,mnesia,trace} data/configs/*.config data/configs/*.args pgdata
+
 fmt:
 	@$(REBAR) fmt
 
