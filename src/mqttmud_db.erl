@@ -133,9 +133,9 @@ handle_call({create_player, Name}, _From, #{conn := Conn} = State) ->
     ),
     {reply, ok, State};
 handle_call({get_player, Name}, _From, #{conn := Conn} = State) ->
-    {ok, _, [{Name, RoomId, RoomName, HP, CurrentHP, Alive, AC, Dmg, DmgMod, Level}]} = epgsql:equery(
+    {ok, _, [{Name, RoomId, RoomName, HP, CurrentHP, Alive, AC, Dmg, DmgMod, Level, RespawnInterval}]} = epgsql:equery(
         Conn,
-        "SELECT p.name,r.id,r.name,p.hp,p.current_hp,p.alive,p.ac,p.dmg,p.dmg_mod,p.level FROM rooms r JOIN room_players rp ON r.id = rp.room_id JOIN players p ON rp.player_id = p.id WHERE p.name = $1",
+        "SELECT p.name,r.id,r.name,p.hp,p.current_hp,p.alive,p.ac,p.dmg,p.dmg_mod,p.level,p.respawn_interval_seconds FROM rooms r JOIN room_players rp ON r.id = rp.room_id JOIN players p ON rp.player_id = p.id WHERE p.name = $1",
         [Name]
     ),
     {reply,
@@ -149,7 +149,8 @@ handle_call({get_player, Name}, _From, #{conn := Conn} = State) ->
             ac => AC,
             dmg => Dmg,
             dmg_mod => DmgMod,
-            level => Level
+            level => Level,
+            respawn_interval_seconds => RespawnInterval
         },
         State};
 handle_call({get_session, Username}, _From, #{conn := Conn} = State) ->
