@@ -45,6 +45,9 @@ init([]) ->
     Opts = [{basic_auth, {APIKey, APISecret}}],
     {ok, #{api_url => EmqxAPI, headers => Headers, opts => Opts}}.
 
+handle_call({create_user, <<"dm">>, _Password}, _From, State) ->
+    logger:warning("Tried to register disallowed user dm."),
+    {reply, {error, register_dm_not_allowed}, State};
 handle_call({create_user, Username, Password}, _From, State) ->
     ApiURL = maps:get(api_url, State),
     EmqxUsersAPI = iolist_to_binary([

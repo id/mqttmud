@@ -79,6 +79,11 @@ function register() {
 
 function login() {
   const username = document.getElementById('username').value;
+  if (username === 'dm' || username === 'DM') {
+    document.getElementById('alertText').innerHTML = 'Cannot login as DM here.';
+    document.getElementById('alert').style.visibility = 'visible';
+    return;
+  }
   const password = document.getElementById('password').value;
   const clientid = username + Math.random().toString(36).substring(7);
   
