@@ -438,6 +438,7 @@ apply_damage(Client, Player, Monster, Dmg) ->
             #{hp := HP, respawn_interval_seconds := RespawnInterval} = Player,
             RespawnedPlayer = Player#{current_hp := HP, alive := true},
             timer:apply_after(timer:seconds(RespawnInterval), mqttmud_db, update_player, [RespawnedPlayer]),
+            mqttmud_db:set_status(Username, normal),
             send_message(Client, <<"users/", Username/binary, "/fight">>, ?DM, Msg),
             send_message(Client, <<"users/", Username/binary, "/fight">>, ?DM, <<"off">>);
         false ->
