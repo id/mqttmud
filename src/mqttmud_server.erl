@@ -377,9 +377,9 @@ handle_hit_roll(Client, Player, MonsterId, Result) ->
 handle_dmg_roll(Client, Player, MonsterId, _N, _S, Result) ->
     #{name := Username, room_id := RoomId, dmg_mod := PlayerDmgMod} = Player,
     Monster = mqttmud_db:get_monster(MonsterId),
-    #{name := MonsterName, current_hp := HP} = Monster,
+    #{name := MonsterName, current_hp := CurrentHP} = Monster,
     Dmg = Result + PlayerDmgMod,
-    NewHP = HP - Dmg,
+    NewHP = CurrentHP - Dmg,
     Msg = <<"You deal ", ?int2bin(Dmg)/binary, " damage to the ", MonsterName/binary, ".">>,
     mqttmud_db:update_monster(Monster#{current_hp := NewHP}),
     send_message(Client, <<"users/", Username/binary, "/fight">>, ?DM, Msg),
@@ -428,9 +428,9 @@ monster_turn(Client, Player, Monster) ->
     end.
 
 apply_damage(Client, Player, Monster, Dmg) ->
-    #{name := Username, current_hp := HP} = Player,
+    #{name := Username, current_hp := CurrentHP} = Player,
     #{name := MonsterName} = Monster,
-    NewHP = HP - Dmg,
+    NewHP = CurrentHP - Dmg,
     case NewHP =< 0 of
         true ->
             mqttmud_db:update_player(Player#{current_hp := NewHP, alive := false}),
