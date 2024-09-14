@@ -99,7 +99,9 @@ handle_cast({subscribe, ClientId, Topic}, State) ->
                 #{<<"code">> := <<"CLIENTID_NOT_FOUND">>} ->
                     {noreply, State};
                 #{<<"code">> := Code, <<"message">> := Message} ->
-                    logger:warning("Failed to subscribe client ~p to ~p: [~s] ~s", [ClientId, Topic, Code, Message]),
+                    logger:warning("Failed to subscribe client ~p to ~p: [~s] ~s", [
+                        ClientId, Topic, Code, Message
+                    ]),
                     {noreply, State}
             end;
         Other ->
@@ -123,7 +125,9 @@ handle_cast({unsubscribe, ClientId, Topic}, State) ->
                 #{<<"code">> := <<"CLIENTID_NOT_FOUND">>} ->
                     {noreply, State};
                 #{<<"code">> := Code, <<"message">> := Message} ->
-                    logger:warning("Failed to unsubscribe client ~p from ~p: [~s] ~s", [ClientId, Topic, Code, Message]),
+                    logger:warning("Failed to unsubscribe client ~p from ~p: [~s] ~s", [
+                        ClientId, Topic, Code, Message
+                    ]),
                     {noreply, State}
             end;
         Other ->

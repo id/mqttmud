@@ -88,7 +88,9 @@ handle_cast({send_welcome_message, Username}, #{client := Client} = State) ->
             <<"Welcome to the game, ", Username/binary,
                 "! Type 'help' for a list of commands. Have fun!">>
     }),
-    emqtt:publish(Client, <<"users/", Username/binary, "/inbox">>, Message, [{qos, 1}, {retain, true}]),
+    emqtt:publish(Client, <<"users/", Username/binary, "/inbox">>, Message, [
+        {qos, 1}, {retain, true}
+    ]),
     {noreply, State};
 handle_cast(_Msg, State) ->
     {noreply, State}.
@@ -279,20 +281,22 @@ init_session(Client, Username, ClientId) ->
             mqttmud_emqx_api:subscribe(ClientId, <<"users/", Username/binary, "/inbox">>),
             mqttmud_emqx_api:subscribe(ClientId, <<"users/", Username/binary, "/fight">>),
             Message = jsone:encode(#{
-                                     type => notification,
-                                     from => ?DM,
-                                     message => <<Username/binary, " entered ", RoomName/binary, ".">>
-                                    }),
+                type => notification,
+                from => ?DM,
+                message => <<Username/binary, " entered ", RoomName/binary, ".">>
+            }),
             emqtt:publish(Client, <<"rooms/", RoomId/binary>>, Message, 1),
-            timer:apply_after(1000, ?MODULE, send_cmd, [Client, <<"users/", Username/binary>>, ?cmd_move, RoomName]),
+            timer:apply_after(1000, ?MODULE, send_cmd, [
+                Client, <<"users/", Username/binary>>, ?cmd_move, RoomName
+            ]),
             mqttmud_emqx_api:subscribe(ClientId, <<"rooms/", RoomId/binary>>);
         false ->
             mqttmud_emqx_api:subscribe(ClientId, <<"users/", Username/binary, "/inbox">>),
             Message = jsone:encode(#{
-                                     type => notification,
-                                     from => ?DM,
-                                     message => <<"You are dead.">>
-                                    }),
+                type => notification,
+                from => ?DM,
+                message => <<"You are dead.">>
+            }),
             emqtt:publish(Client, <<"users/", Username/binary, "/inbox">>, Message, 1)
     end.
 
@@ -369,7 +373,9 @@ handle_hit_roll(Client, Player, MonsterId, Result) ->
             Msg2 = <<"Now roll ", PlayerDMG/binary, " for damage.">>,
             send_message(Client, <<"users/", Username/binary, "/fight">>, ?DM, Msg2);
         false ->
-            Msg = <<?int2bin(Result)/binary, ". You missed! Now it's ", MonsterName/binary, "'s turn.">>,
+            Msg = <<
+                ?int2bin(Result)/binary, ". You missed! Now it's ", MonsterName/binary, "'s turn."
+            >>,
             send_message(Client, <<"users/", Username/binary, "/fight">>, ?DM, Msg),
             monster_turn(Client, Player, Monster)
     end.
@@ -392,7 +398,9 @@ handle_dmg_roll(Client, Player, MonsterId, _N, _S, Result) ->
             mqttmud_db:update_monster(Monster#{alive := false}),
             #{hp := HP, respawn_interval_seconds := RespawnInterval} = Monster,
             RespawnedMonster = Monster#{current_hp := HP, alive := true},
-            timer:apply_after(timer:seconds(RespawnInterval), mqttmud_db, update_monster, [RespawnedMonster]),
+            timer:apply_after(timer:seconds(RespawnInterval), mqttmud_db, update_monster, [
+                RespawnedMonster
+            ]),
             RoomPlayers = mqttmud_db:room_players(RoomId),
             lists:foreach(
                 fun(PlayerName) ->
@@ -409,10 +417,12 @@ handle_dmg_roll(Client, Player, MonsterId, _N, _S, Result) ->
 
 monster_turn(Client, Player, Monster) ->
     #{name := Username, ac := PlayerAC} = Player,
-    #{name := MonsterName, 
-      atk_mod := MosnterAtkMod, 
-      dmg := MonsterDmg, 
-      dmg_mod := MonsterDmgMod} = Monster,
+    #{
+        name := MonsterName,
+        atk_mod := MosnterAtkMod,
+        dmg := MonsterDmg,
+        dmg_mod := MonsterDmgMod
+    } = Monster,
     case roll_dice(<<"1d20">>) of
         {ok, {1, 20, Result}} when (Result + MosnterAtkMod) >= PlayerAC ->
             Msg = <<?int2bin(Result)/binary, ". ", MonsterName/binary, " has hit you!">>,
@@ -437,7 +447,9 @@ apply_damage(Client, Player, Monster, Dmg) ->
             Msg = <<"You have been killed by the ", MonsterName/binary, ".">>,
             #{hp := HP, respawn_interval_seconds := RespawnInterval} = Player,
             RespawnedPlayer = Player#{current_hp := HP, alive := true},
-            timer:apply_after(timer:seconds(RespawnInterval), mqttmud_db, update_player, [RespawnedPlayer]),
+            timer:apply_after(timer:seconds(RespawnInterval), mqttmud_db, update_player, [
+                RespawnedPlayer
+            ]),
             mqttmud_db:set_status(Username, normal),
             send_message(Client, <<"users/", Username/binary, "/fight">>, ?DM, Msg),
             send_message(Client, <<"users/", Username/binary, "/fight">>, ?DM, <<"off">>);

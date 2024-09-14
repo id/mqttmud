@@ -133,7 +133,9 @@ handle_call({create_player, Name}, _From, #{conn := Conn} = State) ->
     ),
     {reply, ok, State};
 handle_call({get_player, Name}, _From, #{conn := Conn} = State) ->
-    {ok, _, [{Name, RoomId, RoomName, HP, CurrentHP, Alive, AC, Dmg, DmgMod, Level, RespawnInterval}]} = epgsql:equery(
+    {ok, _, [
+        {Name, RoomId, RoomName, HP, CurrentHP, Alive, AC, Dmg, DmgMod, Level, RespawnInterval}
+    ]} = epgsql:equery(
         Conn,
         "SELECT p.name,r.id,r.name,p.hp,p.current_hp,p.alive,p.ac,p.dmg,p.dmg_mod,p.level,p.respawn_interval_seconds FROM rooms r JOIN room_players rp ON r.id = rp.room_id JOIN players p ON rp.player_id = p.id WHERE p.name = $1",
         [Name]
@@ -159,17 +161,20 @@ handle_call({get_session, Username}, _From, #{conn := Conn} = State) ->
         "SELECT client_id, status, monster_id FROM sessions WHERE player_id = (SELECT id FROM players WHERE name = $1)",
         [Username]
     ),
-    Status = case Status0 of
-        <<"fight">> -> {fight, MonsterId};
-        <<"normal">> -> normal
-    end,
+    Status =
+        case Status0 of
+            <<"fight">> -> {fight, MonsterId};
+            <<"normal">> -> normal
+        end,
     {reply, #{client_id => ClientId, status => Status, monster_id => MonsterId}, State};
 handle_call({session_exists, Username, ClientId}, _From, #{conn := Conn} = State) ->
-    case epgsql:equery(
-        Conn,
-        "SELECT COUNT(*) FROM sessions WHERE player_id = (SELECT id FROM players WHERE name = $1) and client_id = $2;",
-        [Username, ClientId]
-    ) of
+    case
+        epgsql:equery(
+            Conn,
+            "SELECT COUNT(*) FROM sessions WHERE player_id = (SELECT id FROM players WHERE name = $1) and client_id = $2;",
+            [Username, ClientId]
+        )
+    of
         {ok, _, [{0}]} -> {reply, false, State};
         {ok, _, [_]} -> {reply, true, State}
     end;
@@ -216,17 +221,23 @@ handle_call({player_room, Player}, _From, #{conn := Conn} = State) ->
             [Player]
         )
     of
-        {ok, _, [{RoomId, RoomName}]} -> {reply, #{room_id => RoomId, room_name => RoomName}, State};
-        {ok, _, []} -> {reply, undefined, State}
+        {ok, _, [{RoomId, RoomName}]} ->
+            {reply, #{room_id => RoomId, room_name => RoomName}, State};
+        {ok, _, []} ->
+            {reply, undefined, State}
     end;
 handle_call({get_room_by_exit, Exit, OldRoomId}, _From, #{conn := Conn} = State) ->
-    case epgsql:equery(
-        Conn,
-        "SELECT to_id, name FROM exits WHERE from_id = $1 AND name ILIKE $2;",
-        [OldRoomId, <<Exit/binary, "%">>]
-    ) of
-        {ok, _, [{RoomId, RoomName}]} -> {reply, {ok, #{room_id => RoomId, room_name => RoomName}}, State};
-        {ok, _, []} -> {reply, {error, wrong_exit}, State}
+    case
+        epgsql:equery(
+            Conn,
+            "SELECT to_id, name FROM exits WHERE from_id = $1 AND name ILIKE $2;",
+            [OldRoomId, <<Exit/binary, "%">>]
+        )
+    of
+        {ok, _, [{RoomId, RoomName}]} ->
+            {reply, {ok, #{room_id => RoomId, room_name => RoomName}}, State};
+        {ok, _, []} ->
+            {reply, {error, wrong_exit}, State}
     end;
 handle_call({room_players, RoomId}, _From, #{conn := Conn} = State) ->
     {ok, _, Result} = epgsql:equery(
@@ -293,25 +304,27 @@ handle_call({get_monster, Id}, _From, #{conn := Conn} = State) ->
         State};
 handle_call({find_monster_in_room, RoomId, MonsterName}, _From, #{conn := Conn} = State) ->
     logger:info("find_monster_in_room ~p ~p", [RoomId, MonsterName]),
-    case epgsql:equery(
-        Conn,
-        "SELECT id, name, hp, ac, xp, atk_mod, dmg, dmg_mod, current_hp, alive, respawn_interval_seconds FROM monsters WHERE room_id = $1 and name ILIKE $2;",
-        [RoomId, <<MonsterName/binary, "%">>]
-    ) of
+    case
+        epgsql:equery(
+            Conn,
+            "SELECT id, name, hp, ac, xp, atk_mod, dmg, dmg_mod, current_hp, alive, respawn_interval_seconds FROM monsters WHERE room_id = $1 and name ILIKE $2;",
+            [RoomId, <<MonsterName/binary, "%">>]
+        )
+    of
         {ok, _, [{Id, Name, HP, AC, XP, AttackMod, Dmg, DmgMod, CurrentHP, Alive, RespawnInterval}]} ->
             Monster = #{
-               id => Id,
-               name => Name,
-               hp => HP,
-               ac => AC,
-               xp => XP,
-               atk_mod => AttackMod,
-               dmg => Dmg,
-               dmg_mod => DmgMod,
-               current_hp => CurrentHP,
-               alive => Alive,
-               respawn_interval_seconds => RespawnInterval
-              },
+                id => Id,
+                name => Name,
+                hp => HP,
+                ac => AC,
+                xp => XP,
+                atk_mod => AttackMod,
+                dmg => Dmg,
+                dmg_mod => DmgMod,
+                current_hp => CurrentHP,
+                alive => Alive,
+                respawn_interval_seconds => RespawnInterval
+            },
             {reply, {ok, Monster}, State};
         {ok, _, []} ->
             {reply, {error, not_found}, State}
@@ -338,8 +351,11 @@ handle_call(active_players, _From, #{conn := Conn} = State) ->
         []
     ),
     {reply, [P || {P} <- Result], State};
-handle_call({update_player, #{name := Name, current_hp := HP, alive := Alive}},
-            _From, #{conn := Conn} = State) ->
+handle_call(
+    {update_player, #{name := Name, current_hp := HP, alive := Alive}},
+    _From,
+    #{conn := Conn} = State
+) ->
     {ok, 1} = epgsql:equery(
         Conn,
         "UPDATE players SET current_hp = $1, alive = $2 WHERE name = $3;",
@@ -365,24 +381,27 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 
 apply_migrations(Conn) ->
-    Res = epgsql:equery(Conn, "SELECT schema_version FROM game ORDER BY schema_version DESC LIMIT 1", []),
-    CurrentVersion = case Res of
-                         {ok, _, [{V}]} -> V;
-                         {error, _} -> 0
-                     end,
+    Res = epgsql:equery(
+        Conn, "SELECT schema_version FROM game ORDER BY schema_version DESC LIMIT 1", []
+    ),
+    CurrentVersion =
+        case Res of
+            {ok, _, [{V}]} -> V;
+            {error, _} -> 0
+        end,
     logger:info("Current schema version: ~p", [CurrentVersion]),
     PrivDir = code:priv_dir(mqttmud),
     Migrations0 = filelib:wildcard(filename:join([PrivDir, "migrations", "*.sql"])),
     Migrations1 = lists:sort(
-                    fun(A, B) -> filename:basename(A) < filename:basename(B) end, Migrations0
-                   ),
+        fun(A, B) -> filename:basename(A) < filename:basename(B) end, Migrations0
+    ),
     Migrations = lists:map(
-                   fun(F) ->
-                           [Version, _] = string:split(filename:basename(F), "_"),
-                           {list_to_integer(Version), F}
-                   end,
-                   Migrations1
-                  ),
+        fun(F) ->
+            [Version, _] = string:split(filename:basename(F), "_"),
+            {list_to_integer(Version), F}
+        end,
+        Migrations1
+    ),
     F = fun(Migration) -> apply_migration(Conn, CurrentVersion, Migration) end,
     lists:foreach(F, Migrations).
 
